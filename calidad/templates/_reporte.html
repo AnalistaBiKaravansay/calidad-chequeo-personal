@@ -50,7 +50,7 @@
   {% for c in s.casos %}
   <table role="presentation" class="r-caso" cellspacing="0" cellpadding="0" id="r{{ c.id }}" style="width:100%;border:1px solid #d9dee4;border-left:5px solid {{ COLORES[c['items'][0].tipo] }};margin-bottom:10px;border-radius:4px">
     <tr><td style="padding:10px 12px">
-      <div style="font-size:15px"><b>{% if web %}<a href="/persona/{{ c.persona|urlencode }}" style="color:inherit">{{ c.nombre }}</a>{% else %}{{ c.nombre }}{% endif %}</b>
+      <div style="font-size:15px"><b>{% if web %}<a href="/tablero?persona={{ c.persona|urlencode }}" style="color:inherit">{{ c.nombre }}</a>{% else %}{{ c.nombre }}{% endif %}</b>
         <span style="color:#5f6b7a"> · {{ c.lugar }} · {{ c.fecha[11:16] }} · revisó {{ c.responsable or 'sin dato' }}</span></div>
       {% if c.dias_salud_previos >= 2 and s.clave in ('eta', 'salud') %}
       <div style="color:#5f6b7a;font-size:13px;margin-top:2px">Ha reportado síntomas otros {{ c.dias_salud_previos }} días en los últimos 30 días.</div>

@@ -124,8 +124,17 @@ def normalizar(texto):
     return "".join(c for c in texto if unicodedata.category(c) != "Mn")
 
 
+# El formulario a veces numera los nombres ("12. Dayana Salcedo", "7.Candelaria Morales"): la numeración se quita
+# para que la misma persona no aparezca dos veces (y no se partan sus repeticiones de síntomas).
+NUMERACION = re.compile(r"^\s*\d+\s*[.\-)_:]*\s*")
+
+
+def limpiar_nombre(nombre):
+    return " ".join(NUMERACION.sub("", str(nombre or "")).split())
+
+
 def clave_persona(nombre):
-    return re.sub(r"\s+", " ", normalizar(nombre)).strip()
+    return re.sub(r"\s+", " ", normalizar(limpiar_nombre(nombre))).strip()
 
 
 def _limpio(valor):

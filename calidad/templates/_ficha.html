@@ -1,0 +1,83 @@
+{# Ficha de una persona (tablero con ?persona=...). Variables: ficha, CATEGORIAS, COLORES, NOMBRE_TIPO. #}
+{% import "_graficas.html" as g %}
+{% set f = ficha %}
+<section class="ficha-cabeza">
+  <div>
+    <h2 class="ficha-nombre">{{ f.nombre }}</h2>
+    <div class="nota">
+      {% for l, n in f.lugares %}{{ l }} ({{ n }}){{ ', ' if not loop.last }}{% endfor %}
+      · revisado sobre todo por {% for r, n in f.responsables %}{{ r }}{{ ', ' if not loop.last }}{% endfor %}
+    </div>
+  </div>
+  <a class="boton" href="/datos?persona={{ f.nombre|urlencode }}&desde={{ f.primero }}">Ver sus chequeos en Datos</a>
+</section>
+
+<div class="kpis">
+  <div class="kpi"><div class="kpi-titulo">Chequeos</div><div class="kpi-valor">{{ f.chequeos }}</div>
+    <div class="kpi-pie"><span>desde {{ f.primero }}</span></div></div>
+  <div class="kpi"><div class="kpi-titulo">Último chequeo</div><div class="kpi-valor kpi-fecha">{{ f.ultimo }}</div>
+    <div class="kpi-pie"><span>{{ f.chequeos_30 }} en los últimos 30 días</span></div></div>
+  <div class="kpi"><div class="kpi-titulo">Sin ninguna novedad</div><div class="kpi-valor">{{ f.sin_novedad_pct }}%</div>
+    <div class="kpi-pie"><span>de sus chequeos</span></div></div>
+  <div class="kpi"><div class="kpi-titulo">Días con síntomas</div><div class="kpi-valor">{{ f.dias_salud_30 }}</div>
+    <div class="kpi-pie"><span>en 30 días · {{ f.dias_salud_90 }} en 90 · {{ f.dias_salud_total }} en total</span></div></div>
+</div>
+
+<div class="categorias">
+  {% for c in f.categorias %}
+  <a class="categoria {{ 'vacia' if not c['items'] }}" {% if c['items'] %}href="#cat-{{ c.tipo }}"{% endif %} style="--color:{{ COLORES[c.tipo] }}">
+    <span class="categoria-titulo">{{ c.titulo }}</span>
+    <span class="categoria-valor">{{ c.dias }}<small>día{{ 's' if c.dias != 1 }}</small></span>
+    <span class="nota">{% if c.dias %}último {{ c.ultima }}{% else %}nunca{% endif %}</span>
+  </a>
+  {% endfor %}
+</div>
+
+{% for c in f.categorias if c['items'] %}
+<section id="cat-{{ c.tipo }}">
+  <h2><span class="etiqueta" style="background:{{ COLORES[c.tipo] }}">{{ NOMBRE_TIPO[c.tipo] }}</span> {{ c.titulo }}
+    <span class="nota">· {{ c.dias }} día{{ 's' if c.dias != 1 }}</span></h2>
+  <div class="tabla"><table>
+    <tr><th>Novedad</th><th class="num">Veces</th><th>Última</th><th>Fechas</th></tr>
+    {% for i in c['items'] %}
+    <tr>
+      <td>{{ i.etiqueta }}</td><td class="num {{ 'alto' if i.veces >= 3 }}">{{ i.veces }}</td><td class="sin-salto">{{ i.ultima }}</td>
+      <td><div class="chips">
+        {% for d in i.fechas[:12] %}<a class="chip" href="/?dia={{ d }}" title="Ver el reporte de ese día">{{ d }}</a>{% endfor %}
+        {% if i.fechas|length > 12 %}<details><summary>+{{ i.fechas|length - 12 }} más</summary>
+          <div class="chips">{% for d in i.fechas[12:] %}<a class="chip" href="/?dia={{ d }}">{{ d }}</a>{% endfor %}</div></details>{% endif %}
+      </div></td>
+    </tr>
+    {% endfor %}
+  </table></div>
+</section>
+{% endfor %}
+
+<section>
+  <h2>Mes a mes</h2>
+  {{ g.meses(f.por_mes, [('eta', 'ETA'), ('salud', 'Síntomas'), ('lesion', 'Lesión'), ('bpm', 'BPM'), ('epp', 'EPP'), ('dotacion', 'Dotación'), ('revisar', 'Por revisar')]) }}
+</section>
+
+{% if f.observaciones %}
+<section>
+  <h2>Últimas observaciones escritas</h2>
+  <div class="tabla"><table>
+    {% for r in f.observaciones %}<tr><td class="sin-salto"><a href="/?dia={{ r.dia }}">{{ r.fecha[:16] }}</a></td><td>{{ r.observacion }}</td></tr>{% endfor %}
+  </table></div>
+</section>
+{% endif %}
+
+<section>
+  <details>
+    <summary><h2 style="display:inline">Historial completo</h2> <span class="nota">· {{ f.historial|length }} chequeos con novedades</span></summary>
+    <div class="tabla" style="margin-top:.75rem"><table>
+      <tr><th>Fecha</th><th>Lugar</th><th>Novedades</th><th>Observación</th></tr>
+      {% for r in f.historial %}
+      <tr><td class="sin-salto"><a href="/?dia={{ r.dia }}">{{ r.fecha[:16] }}</a></td><td>{{ r.lugar }}</td>
+        <td>{% for n in r.novedades %}<span class="etiqueta" style="background:{{ COLORES[n.tipo] }}">{{ NOMBRE_TIPO[n.tipo] }}</span> {{ n.etiqueta }}<br>{% endfor %}</td>
+        <td>{{ r.observacion }}</td></tr>
+      {% endfor %}
+    </table></div>
+  </details>
+</section>
+<p class="nota">La persona se identifica por el nombre escrito en el formulario (sin tildes, mayúsculas ni numeración). Si el nombre se escribió muy distinto, puede aparecer por separado.</p>

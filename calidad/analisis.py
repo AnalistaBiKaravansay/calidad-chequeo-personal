@@ -173,66 +173,177 @@ def resumen_dia(respuestas, casos):
             "bpm": personas({"bpm"}), "dotacion": personas({"dotacion", "epp"})}
 
 
-def tablero(con, hasta, lugar="", persona=""):
-    """Cifras para el tablero histórico. 'hasta' es el último día con datos; 'persona' es la clave normalizada."""
+# Indicadores del tablero: (clave, título, qué cuenta en cada chequeo, si subir es malo).
+INDICADORES = [
+    ("chequeos", "Chequeos", lambda r: True, False),
+    ("eta", "Con alerta ETA", lambda r: any(n["tipo"] == "eta" for n in r["novedades"]), True),
+    ("salud", "Con síntomas o lesión", lambda r: any(_es_salud(n) or n["tipo"] == "lesion" for n in r["novedades"]), True),
+    ("bpm", "Incumplen BPM", lambda r: any(n["tipo"] == "bpm" for n in r["novedades"]), True),
+    ("epp", "Sin algún EPP", lambda r: any(n["tipo"] == "epp" for n in r["novedades"]), True),
+    ("dotacion", "Con novedad de dotación", lambda r: any(n["tipo"] == "dotacion" for n in r["novedades"]), True),
+]
+CATEGORIAS = [("eta", "Alertas ETA"), ("salud", "Síntomas"), ("lesion", "Lesiones"), ("revisar", "Observaciones por revisar"),
+              ("bpm", "BPM"), ("epp", "EPP"), ("dotacion", "Dotación")]
+
+
+def _semana(dia):
+    return (_dia(dia) - timedelta(days=_dia(dia).weekday())).isoformat()
+
+
+def _cifras_periodo(filas_):
+    """Conteo de chequeos por indicador y personas distintas en un periodo."""
+    cifras = {clave: sum(1 for r in filas_ if cuenta(r)) for clave, _, cuenta, _ in INDICADORES}
+    cifras["personas"] = len({r["persona"] for r in filas_})
+    return cifras
+
+
+def _kpis(todas, hasta):
+    """Últimos 30 días frente a los 30 anteriores."""
+    desde30, desde60 = _restar(hasta, 30), _restar(hasta, 60)
+    ahora = _cifras_periodo([r for r in todas if desde30 < r["dia"] <= hasta])
+    antes = _cifras_periodo([r for r in todas if desde60 < r["dia"] <= desde30])
+    kpis = []
+    for clave, titulo, _, malo in INDICADORES:
+        pct = round(100 * ahora[clave] / ahora["chequeos"], 1) if ahora["chequeos"] and clave != "chequeos" else None
+        kpis.append({"clave": clave, "titulo": titulo, "valor": ahora[clave], "antes": antes[clave],
+                     "malo_si_sube": malo, "pct": pct, "personas": ahora["personas"] if clave == "chequeos" else 0})
+    return kpis
+
+
+def tablero(con, hasta, lugar=""):
+    """Cifras para el tablero histórico de toda la planta (o de un lugar). 'hasta' es el último día con datos."""
     base = registros(con)
-    todas = [r for r in base if r["dia"] <= hasta and (not lugar or r["lugar"] == lugar)
-             and (not persona or r["persona"] == persona)]
+    todas = [r for r in base if r["dia"] <= hasta and (not lugar or r["lugar"] == lugar)]
 
     meses = defaultdict(Counter)
     for r in todas:
         mes = meses[r["dia"][:7]]
-        mes["respuestas"] += 1
-        for tipo in {n["tipo"] for n in r["novedades"]}:
-            mes[tipo] += 1
+        mes["chequeos"] += 1
+        for clave, _, cuenta, _ in INDICADORES[1:]:
+            mes[clave] += cuenta(r)
     por_mes = [{"mes": m, **meses[m]} for m in sorted(meses)][-13:]
 
     desde90, desde30, desde84 = _restar(hasta, 90), _restar(hasta, 30), _restar(hasta, 84)
-    sintomas, problemas, lugares = Counter(), Counter(), defaultdict(Counter)
-    semanas = defaultdict(Counter)
+    top = {t: Counter() for t, _ in CATEGORIAS}
+    lugares, responsables, semanas = defaultdict(Counter), defaultdict(Counter), defaultdict(Counter)
     recurrentes = defaultdict(lambda: {"dias": set(), "claves": Counter(), "nombre": ""})
+    incumplen = defaultdict(lambda: Counter(nombre=""))
     for r in todas:
         if r["dia"] > desde84:
-            semana = (_dia(r["dia"]) - timedelta(days=_dia(r["dia"]).weekday())).isoformat()
-            semanas[semana]["respuestas"] += 1
+            semana = semanas[_semana(r["dia"])]
+            semana["chequeos"] += 1
             for grupo, claves in GRUPOS.items():
                 if any(_es_salud(n) and n["clave"] in claves for n in r["novedades"]):
-                    semanas[semana][grupo] += 1
+                    semana[grupo] += 1
         if r["dia"] <= desde90:
             continue
-        lugares[r["lugar"]]["respuestas"] += 1
-        if any(_es_salud(n) for n in r["novedades"]):
-            lugares[r["lugar"]]["salud"] += 1
+        con_salud = any(_es_salud(n) for n in r["novedades"])
+        lugares[r["lugar"]]["chequeos"] += 1
+        lugares[r["lugar"]]["salud"] += con_salud
+        lugares[r["lugar"]]["bpm"] += any(n["tipo"] == "bpm" for n in r["novedades"])
+        lugares[r["lugar"]]["epp"] += any(n["tipo"] == "epp" for n in r["novedades"])
+        quien = r["responsable"] or "Sin dato"
+        responsables[quien]["chequeos"] += 1
+        responsables[quien]["con_novedad"] += bool(r["novedades"])
+        responsables[quien]["salud"] += con_salud
         for n in r["novedades"]:
-            if _es_salud(n):
-                sintomas[n["etiqueta"]] += 1
-            elif n["tipo"] != "salud":
-                problemas[n["etiqueta"]] += 1
-            if r["dia"] > desde30 and _es_salud(n):
-                p = recurrentes[r["persona"]]
-                p["dias"].add(r["dia"]); p["claves"][n["etiqueta"]] += 1; p["nombre"] = r["nombre"]
+            if n["clave"] != "embarazo":
+                top[n["tipo"]][n["etiqueta"]] += 1
+        if r["dia"] > desde30:
+            for n in r["novedades"]:
+                if _es_salud(n):
+                    p = recurrentes[r["persona"]]
+                    p["dias"].add(r["dia"]); p["claves"][n["etiqueta"]] += 1; p["nombre"] = r["nombre"]
+            tipos = {n["tipo"] for n in r["novedades"]} & {"bpm", "epp", "dotacion"}
+            if tipos:
+                p = incumplen[r["persona"]]
+                p["nombre"] = r["nombre"]
+                for t in tipos:
+                    p[t] += 1
 
     personas = sorted(({"persona": k, "nombre": v["nombre"], "dias": len(v["dias"]),
                         "ultimo": max(v["dias"]), "sintomas": ", ".join(f"{e} ({c})" for e, c in v["claves"].most_common(3))}
                        for k, v in recurrentes.items() if len(v["dias"]) >= 2),
                       key=lambda p: (-p["dias"], p["nombre"]))
+    reincidentes = sorted(({"persona": k, "nombre": v["nombre"], "bpm": v["bpm"], "epp": v["epp"],
+                            "dotacion": v["dotacion"], "total": v["bpm"] + v["epp"] + v["dotacion"]}
+                           for k, v in incumplen.items()), key=lambda p: (-p["total"], p["nombre"]))
     return {
+        "kpis": _kpis(todas, hasta),
         "por_mes": por_mes,
         "semanas": [{"semana": s, **semanas[s]} for s in sorted(semanas)],
         "grupos": list(GRUPOS),
-        "sintomas": sintomas.most_common(12),
-        "problemas": problemas.most_common(12),
-        "lugares": sorted(({"lugar": k, **v} for k, v in lugares.items()), key=lambda x: -x["respuestas"]),
-        "recurrentes": personas[:25],
+        "sintomas": (top["eta"] + top["salud"] + top["lesion"]).most_common(10),
+        "bpm": top["bpm"].most_common(10),
+        "epp": top["epp"].most_common(10),
+        "dotacion": top["dotacion"].most_common(10),
+        "lugares": sorted(({"lugar": k, **v} for k, v in lugares.items()), key=lambda x: -x["chequeos"]),
+        "responsables": sorted(({"responsable": k, **v} for k, v in responsables.items()), key=lambda x: -x["chequeos"]),
+        "recurrentes": personas[:20],
+        "reincidentes": [p for p in reincidentes if p["total"] >= 2][:20],
         "lista_lugares": base.lugares,
         "lista_personas": base.personas,
     }
 
 
-def persona(con, clave):
-    del_historial = [r for r in reversed(registros(con)) if r["persona"] == clave]
-    conteo = Counter(n["etiqueta"] for r in del_historial for n in r["novedades"])
-    return del_historial, conteo.most_common()
+def buscar_personas(con, texto):
+    """[(clave, nombre)] de las personas cuyo nombre contiene todas las palabras escritas (sin tildes ni
+    mayúsculas ni numeración). Si el texto coincide exacto con una persona, solo esa."""
+    from .reglas import clave_persona
+    buscado = clave_persona(texto)
+    if not buscado:
+        return []
+    nombres = {}
+    for r in registros(con):
+        nombres[r["persona"]] = max(nombres.get(r["persona"], ""), r["nombre"])
+    if buscado in nombres:
+        return [(buscado, nombres[buscado])]
+    palabras = buscado.split()
+    return sorted(((k, v) for k, v in nombres.items() if all(p in k for p in palabras)), key=lambda x: x[1])
+
+
+def ficha_persona(con, clave, hasta):
+    """Todo lo de una persona: indicadores, cuántas veces y en qué fechas tuvo cada novedad, por categoría."""
+    filas_ = [r for r in registros(con) if r["persona"] == clave and r["dia"] <= hasta]
+    if not filas_:
+        return None
+    dias = sorted({r["dia"] for r in filas_})
+    con_novedad = [r for r in filas_ if r["novedades"]]
+    detalle = {t: defaultdict(set) for t, _ in CATEGORIAS}
+    for r in filas_:
+        for n in r["novedades"]:
+            detalle[n["tipo"]][n["etiqueta"]].add(r["dia"])
+    categorias = []
+    for tipo, titulo in CATEGORIAS:
+        items = sorted(({"etiqueta": e, "veces": len(ds), "ultima": max(ds), "fechas": sorted(ds, reverse=True)}
+                        for e, ds in detalle[tipo].items()), key=lambda x: (-x["veces"], x["etiqueta"]))
+        dias_tipo = {d for i in items for d in i["fechas"]}
+        categorias.append({"tipo": tipo, "titulo": titulo, "items": items, "dias": len(dias_tipo),
+                           "ultima": max(dias_tipo) if dias_tipo else ""})
+    meses = defaultdict(Counter)
+    for r in filas_:
+        mes = meses[r["dia"][:7]]
+        mes["chequeos"] += 1
+        for t in {n["tipo"] for n in r["novedades"]}:
+            mes[t] += 1
+    desde30, desde90 = _restar(hasta, 30), _restar(hasta, 90)
+    dias_salud = lambda desde: len({r["dia"] for r in filas_ if r["dia"] > desde
+                                    and any(_es_salud(n) for n in r["novedades"])})
+    return {
+        "nombre": max(r["nombre"] for r in filas_),
+        "clave": clave,
+        "chequeos": len(filas_),
+        "primero": dias[0], "ultimo": dias[-1],
+        "chequeos_30": sum(1 for r in filas_ if r["dia"] > desde30),
+        "sin_novedad_pct": round(100 * (len(filas_) - len(con_novedad)) / len(filas_)),
+        "dias_salud_30": dias_salud(desde30), "dias_salud_90": dias_salud(desde90), "dias_salud_total": dias_salud(""),
+        "lugares": Counter(r["lugar"] for r in filas_).most_common(),
+        "responsables": Counter(r["responsable"] or "Sin dato" for r in filas_).most_common(3),
+        "categorias": categorias,
+        "por_mes": [{"mes": m, **meses[m]} for m in sorted(meses)][-13:],
+        "historial": list(reversed(con_novedad)),
+        "observaciones": [r for r in reversed(filas_) if r["observacion"]][:15],
+    }
 
 
 def tabla(con, desde, hasta, lugar="", persona="", tipo="", texto="", limite=None, desplazamiento=0):

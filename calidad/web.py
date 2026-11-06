@@ -159,20 +159,21 @@ def enviar(dia: str = Form(...)):
 
 @app.get("/tablero")
 def tablero(request: Request, lugar: str = "", persona: str = ""):
+    """Tablero de la planta; con 'persona' (nombre completo o parte), la ficha de esa persona."""
     persona = persona.strip()
-    clave = reglas.clave_persona(persona) if persona else ""
     with closing(conexion()) as con:
         hasta = _ultimo_dia(con)
-        cifras = analisis.tablero(con, hasta, lugar, clave)
-    return pagina("tablero.html", request, hasta=hasta, lugar=lugar, persona=persona, persona_clave=clave, **cifras)
+        coincidencias = analisis.buscar_personas(con, persona) if persona else []
+        ficha = analisis.ficha_persona(con, coincidencias[0][0], hasta) if len(coincidencias) == 1 else None
+        cifras = analisis.tablero(con, hasta, lugar)
+    return pagina("tablero.html", request, hasta=hasta, lugar=lugar, persona=persona, ficha=ficha,
+                  coincidencias=coincidencias, CATEGORIAS=analisis.CATEGORIAS, **cifras)
 
 
 @app.get("/persona/{clave}")
-def persona(request: Request, clave: str):
-    with closing(conexion()) as con:
-        registros, conteo = analisis.persona(con, clave)
-    return pagina("persona.html", request, registros=registros, conteo=conteo,
-                  nombre=registros[0]["nombre"] if registros else clave)
+def persona(clave: str):
+    """Enlaces antiguos y del reporte: la ficha de la persona está en el tablero."""
+    return RedirectResponse(f"/tablero?persona={quote(clave)}", status_code=303)
 
 
 @app.post("/recargar")

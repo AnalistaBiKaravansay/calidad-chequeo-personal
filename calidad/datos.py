@@ -168,7 +168,7 @@ def crudo(con, texto):
 def valores(fila):
     """Tupla lista para GUARDAR_RESPUESTA a partir de una fila del Excel."""
     fecha = _fecha(fila.get("Hora de finalización") or fila.get("Hora de inicio"))
-    nombre = " ".join(_texto(fila.get("NOMBRE1")).split()) or "(sin nombre)"
+    nombre = reglas.limpiar_nombre(_texto(fila.get("NOMBRE1"))) or "(sin nombre)"
     lista = [v.isoformat(sep=" ") if isinstance(v, datetime) else v for v in fila.values()]
     return (int(fila["Id"]), fecha.strftime("%Y-%m-%d %H:%M:%S"), fecha.strftime("%Y-%m-%d"), nombre,
             reglas.clave_persona(nombre), _texto(fila.get("LUGAR")) or "Sin lugar",
@@ -310,6 +310,23 @@ def compactar(con):
     return len(cambios)
 
 
+def unificar_personas(con):
+    """Quita la numeración de los nombres ya guardados ("12. Dayana Salcedo" -> "Dayana Salcedo") para que cada
+    persona quede una sola vez. Devuelve cuántas filas cambió."""
+    global _escrituras
+    cambios = []
+    for r in con.execute("SELECT id, nombre, persona FROM respuestas").fetchall():
+        nombre = reglas.limpiar_nombre(r["nombre"]) or "(sin nombre)"
+        persona = reglas.clave_persona(nombre)
+        if (nombre, persona) != (r["nombre"], r["persona"]):
+            cambios.append((nombre, persona, r["id"]))
+    with con:
+        for inicio in range(0, len(cambios), 1000):
+            con.executemany("UPDATE respuestas SET nombre=?, persona=? WHERE id=?", cambios[inicio:inicio + 1000])
+    _escrituras += 1
+    return len(cambios)
+
+
 def subir(origen_sqlite, destino):
     """Copia todo lo de una base SQLite local (versión anterior) a la base de destino, sin duplicar, y lo deja en
     formato compacto. Devuelve cuántas filas se copiaron por tabla."""
@@ -344,6 +361,7 @@ def subir(origen_sqlite, destino):
         origen.close()
     _escrituras += 1
     compactar(destino)
+    unificar_personas(destino)
     return copiadas
 
 

@@ -24,6 +24,12 @@ Forms → Power Automate → "Respuestas Forms (flujo).xlsx" en OneDrive
 
 > **Antes de compartir el enlace:** la página guarda datos de salud del personal (datos sensibles, Ley 1581) en servidores de Neon y Render fuera de Colombia. Se necesita la autorización de la empresa.
 
+## Tablero y ficha por persona
+
+- **Tablero general:** indicadores de los últimos 30 días frente a los 30 anteriores (chequeos y personas, alertas ETA, síntomas o lesión, BPM, EPP, dotación), síntomas por semana, lo más reportado en 90 días (síntomas, criterios BPM, EPP, dotación), quién repite síntomas y quién reincide en BPM/EPP/dotación, cifras por lugar y por responsable del chequeo, y la evolución mes a mes. Al pasar el mouse por una barra se ve el valor exacto.
+- **Ficha de persona:** en el buscador del tablero se escribe el nombre **o una parte** ("dayana", "gonzalez"); si coinciden varias personas, se elige de la lista. La ficha muestra chequeos, último chequeo, % sin novedad, días con síntomas (30, 90 y total), y por cada categoría (ETA, síntomas, lesiones, por revisar, BPM, EPP, dotación) **cuántas veces y en qué fechas** tuvo cada novedad (cada fecha abre el reporte de ese día), el mes a mes, las últimas observaciones y el historial completo. Los nombres del reporte y de Datos llevan a esta ficha.
+- **Nombres numerados:** el formulario a veces escribe "12. Dayana Salcedo". La numeración se quita al guardar, así que cada persona aparece una sola vez y sus síntomas repetidos se cuentan juntos (antes 238 nombres, ahora 138). Si un nombre se escribe muy distinto (otra ortografía), sigue apareciendo por separado.
+
 ## Ahorro de espacio, consultas y uso de IA
 
 El plan gratuito de Neon limita el espacio (unos 500 MB) y las horas que la base pasa despierta. Por eso:
@@ -75,7 +81,7 @@ El detalle de cada ejecución queda en `%USERPROFILE%\CalidadKaravansayNube\regi
 | `python -m calidad clave-bd` / `clave-ia` | Guarda la dirección de Neon / la clave de Gemini en este PC. |
 | `python -m calidad probar-bd` | Comprueba la conexión. |
 | `python -m calidad subir` | Copia la base de la versión local a la nube. |
-| `python -m calidad compactar` | Pasa respuestas en formato antiguo al compacto y libera el espacio. |
+| `python -m calidad compactar` | Pasa respuestas en formato antiguo al compacto, quita la numeración de los nombres y libera el espacio. |
 
 ## Archivos y datos privados
 - Datos privados del PC puente: `%USERPROFILE%\CalidadKaravansayNube` (`bd_nube.txt`, `clave_gemini.txt`, `firmas.json`, reportes, `registro.txt`). No están en la carpeta de red ni en GitHub.
@@ -93,11 +99,12 @@ Configuracion\INSTALAR.cmd                       (instala requirements-dev.txt: 
 |---|---|
 | `calidad/bd.py` | Conexión: PostgreSQL si hay `DATABASE_URL` o `bd_nube.txt`; si no, SQLite local |
 | `calidad/datos.py` | Lee los Excel, sube solo lo nuevo, formato compacto, firmas locales y memoria de respuestas (`registros`) |
-| `calidad/analisis.py` | Novedades del día, historial, alertas y tablero, calculados sobre la memoria |
+| `calidad/analisis.py` | Novedades del día, historial, alertas, tablero (`tablero`), búsqueda y ficha de persona (`buscar_personas`, `ficha_persona`), calculados sobre la memoria |
+| `calidad/reglas.py` | Detección de novedades; `limpiar_nombre` quita la numeración de los nombres |
 | `calidad/ia.py` | Consejos de Gemini por caso (solo los casos nuevos), marcas 👍/👎 |
 | `calidad/guia.py` | Pasos de la guía; `texto_para_ia()` envía solo la parte que aplica |
 | `calidad/web.py` | Página; inicio de sesión con `CALIDAD_CLAVE`; modo nube con `CALIDAD_NUBE=1`; gzip y caché |
-| `calidad/templates`, `calidad/static` | Diseño con la paleta de Karavansay (igual que Capacitaciones) y el logo |
+| `calidad/templates`, `calidad/static` | Diseño con la paleta de Karavansay (igual que Capacitaciones) y el logo. `_graficas.html`: barras en HTML/CSS; `_ficha.html`: ficha de persona |
 | `render.yaml` | Configuración de Render |
 
 Las reglas de detección (`reglas.py`) y la guía son las mismas de la versión local; ver el README de `PROYECTO-CALIDAD`.

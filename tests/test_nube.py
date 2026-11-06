@@ -184,6 +184,35 @@ def test_paginas_comprimidas_y_estilos_en_cache(carpeta, monkeypatch):
     assert "immutable" in c.get("/static/estilo.css").headers["cache-control"]
 
 
+def test_nombre_numerado_es_la_misma_persona(carpeta):
+    from calidad import reglas
+    assert reglas.clave_persona("12. Dayana Salcedo") == reglas.clave_persona("dayana  salcedo") == "dayana salcedo"
+    assert reglas.clave_persona("7.Candelaria Morales") == "candelaria morales"
+    con = datos.conectar()
+    datos.guardar(con, fila(1, nombre="12. Dayana Salcedo"))
+    assert con.execute("SELECT nombre FROM respuestas WHERE id=1").fetchone()[0] == "Dayana Salcedo"
+    con.execute("UPDATE respuestas SET nombre='5. Aurora Lazo', persona='5. aurora lazo' WHERE id=1")
+    assert datos.unificar_personas(con) == 1
+    assert con.execute("SELECT persona FROM respuestas WHERE id=1").fetchone()[0] == "aurora lazo"
+
+
+def test_tablero_busca_por_parte_del_nombre_y_muestra_la_ficha(carpeta, monkeypatch):
+    con = datos.conectar()
+    datos.guardar(con, fila(1, nombre="Ana Gómez", obs="Gripa", fecha="2026-10-18 08:00:00"))
+    datos.guardar(con, fila(2, nombre="9. Ana Gómez", fecha="2026-10-20 08:00:00",
+                            **{"Criterios BPM.Uso adecuado cofia": "No cumple", "CRITERIOS EPP .Tapaoídos": "NO"}))
+    datos.guardar(con, fila(3, nombre="Beto Gómez", fecha="2026-10-20 09:00:00"))
+    con.commit(); con.close()
+    c = cliente(monkeypatch)
+    ficha = c.get("/tablero?persona=ana").text
+    assert "Ficha de persona" in ficha and "2026-10-18" in ficha and "Uso adecuado cofia" in ficha
+    assert "Tapaoídos" in ficha and ">2<" in ficha   # dos chequeos: el nombre numerado es la misma persona
+    assert "Varias personas" in c.get("/tablero?persona=gomez").text
+    general = c.get("/tablero").text
+    assert "personas</span>" in general and "Criterios BPM incumplidos" in general
+    assert c.get("/persona/ana%20gomez", follow_redirects=False).headers["location"].startswith("/tablero?persona=")
+
+
 def test_ruta_de_windows_se_respeta_en_el_servidor():
     # Debe quedar igual a la que guardó el PC puente, también cuando la página corre en Linux.
     assert str(config.ruta_excel("C:\\Users\\x\\flujo.xlsx")) == "C:\\Users\\x\\flujo.xlsx"

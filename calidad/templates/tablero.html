@@ -1,79 +1,121 @@
 {% extends "base.html" %}
-{% macro barra(valor, maximo, color) %}<span class="barra-fondo"><span class="barra-valor" style="width:{{ (100 * valor / maximo)|round(1) if maximo else 0 }}%;background:{{ color }}"></span></span>{% endmacro %}
-{% block titulo %}Tablero{% endblock %}
+{% import "_graficas.html" as g %}
+{% block titulo %}{{ ficha.nombre if ficha else 'Tablero' }}{% endblock %}
 {% block contenido %}
 <div class="encabezado">
-  <h1>Tablero histórico</h1>
-  <form method="get" class="barra">
+  <div>
+    <h1>{{ 'Ficha de persona' if ficha else 'Tablero' }}</h1>
+    <div class="nota">Datos hasta el {{ hasta|fecha_larga }}{% if lugar and not ficha %} · {{ lugar }}{% endif %}</div>
+  </div>
+  <form method="get" class="barra" action="/tablero">
     <select name="lugar" onchange="this.form.submit()" aria-label="Lugar">
       <option value="">Todos los lugares</option>
       {% for l in lista_lugares %}<option {{ 'selected' if l == lugar }}>{{ l }}</option>{% endfor %}
     </select>
-    <input type="search" name="persona" list="personas" value="{{ persona }}" placeholder="Buscar persona…"
-           onchange="this.form.submit()" style="min-width:220px" aria-label="Buscar persona">
+    <input type="search" name="persona" list="personas" value="{{ persona }}" placeholder="Buscar persona (nombre o parte)…"
+           style="min-width:240px" aria-label="Buscar persona">
     <datalist id="personas">{% for p in lista_personas %}<option value="{{ p }}">{% endfor %}</datalist>
-    <button class="principal">Filtrar</button>
-    {% if lugar or persona %}<a class="boton" href="/tablero">Quitar filtros</a>{% endif %}
+    <button class="principal">Ver</button>
+    {% if lugar or persona %}<a class="boton discreto" href="/tablero">Quitar filtros</a>{% endif %}
   </form>
 </div>
-<p class="nota">Datos hasta el {{ hasta }}. “Salud” cuenta alertas ETA y otros síntomas; cada chequeo cuenta una vez por tipo.</p>
-{% if persona %}
-<p class="mensaje">
-  {% if por_mes %}Mostrando solo a <b>{{ persona }}</b>{% if lugar %} en {{ lugar }}{% endif %}.
-  Ver su <a href="/persona/{{ persona_clave|urlencode }}">historial completo</a>.
-  {% else %}No hay chequeos de <b>{{ persona }}</b>{% if lugar %} en {{ lugar }}{% endif %}. Revise cómo está escrito el nombre.{% endif %}
-</p>
+
+{% if persona and not ficha %}
+<div class="mensaje">
+  {% if coincidencias %}Varias personas coinciden con “{{ persona }}”. Elija una:
+    <div class="chips" style="margin-top:.5rem">{% for clave, nombre in coincidencias[:40] %}<a class="chip" href="/tablero?persona={{ clave|urlencode }}">{{ nombre }}</a>{% endfor %}</div>
+  {% else %}No hay chequeos de “{{ persona }}”. Pruebe con solo el nombre o solo el apellido.{% endif %}
+</div>
 {% endif %}
 
+{% if ficha %}
+  {% include "_ficha.html" %}
+{% else %}
+
+<div class="kpis">
+  {% for k in kpis %}
+  {% set dif = k.valor - k.antes %}
+  <div class="kpi">
+    <div class="kpi-titulo">{{ k.titulo }}</div>
+    <div class="kpi-valor">{{ k.valor }}</div>
+    <div class="kpi-pie">
+      {% if k.pct is not none %}<span>{{ k.pct }}% de los chequeos</span>{% elif k.personas %}<span>{{ k.personas }} personas</span>{% endif %}
+      {% if dif %}
+      <span class="{{ ('peor' if dif > 0 else 'mejor') if k.malo_si_sube }}" title="{{ k.antes }} en los 30 días anteriores">{{ '▲' if dif > 0 else '▼' }} {{ dif|abs }} vs. 30 días antes</span>
+      {% else %}<span title="{{ k.antes }} en los 30 días anteriores">= igual que 30 días antes</span>{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+<p class="nota">Últimos 30 días frente a los 30 anteriores. Cada chequeo cuenta una vez por indicador.</p>
+
 <section>
-  <h2>Síntomas por semana (últimas 12 semanas)</h2>
-  <p class="nota">Sirve para ver si algo está pasando: un salto en una columna frente a las semanas anteriores merece revisión.</p>
-  {% set maximo = semanas|map(attribute='respuestas')|max if semanas else 0 %}
+  <h2>Síntomas por semana <span class="nota">· últimas 12 semanas</span></h2>
+  <p class="nota">Un salto frente a las semanas anteriores merece revisión. En rojo, 5 o más casos en la semana.</p>
   <div class="tabla"><table>
-    <tr><th>Semana del</th><th>Chequeos</th>{% for g in grupos %}<th>{{ g|capitalize }}</th>{% endfor %}</tr>
+    <tr><th>Semana del</th><th class="num">Chequeos</th>{% for gr in grupos %}<th>{{ gr|capitalize }}</th>{% endfor %}</tr>
     {% for s in semanas %}
-    <tr><td>{{ s.semana }}</td><td>{{ s.respuestas }}</td>
-      {% for g in grupos %}{% set v = s[g] or 0 %}<td class="{{ 'alto' if v >= 5 }}">{{ v }} {{ barra(v, 15, '#b45309') }}</td>{% endfor %}
+    <tr><td class="sin-salto">{{ s.semana }}</td><td class="num">{{ s.chequeos }}</td>
+      {% for gr in grupos %}{% set v = s[gr] or 0 %}<td class="sin-salto {{ 'alto' if v >= 5 }}">{{ g.barra(v, 15, v ~ ' casos ' ~ gr ~ ', semana del ' ~ s.semana, 80) }} {{ v }}</td>{% endfor %}
     </tr>
     {% endfor %}
   </table></div>
 </section>
 
 <div class="columnas">
+  <section><h2>Síntomas y lesiones más reportados <span class="nota">· 90 días</span></h2>{{ g.ranking(sintomas, 'Sin síntomas reportados.') }}</section>
+  <section><h2>Criterios BPM incumplidos <span class="nota">· 90 días</span></h2>{{ g.ranking(bpm, 'Sin incumplimientos BPM.') }}</section>
+  <section><h2>EPP no usado <span class="nota">· 90 días</span></h2>{{ g.ranking(epp, 'Sin novedades de EPP.') }}</section>
+  <section><h2>Dotación <span class="nota">· 90 días</span></h2>{{ g.ranking(dotacion, 'Sin novedades de dotación.') }}</section>
+</div>
+
+<div class="columnas">
   <section>
-    <h2>Síntomas más reportados (90 días)</h2>
-    {% set m = sintomas[0][1] if sintomas else 0 %}
-    <table>{% for e, n in sintomas %}<tr><td>{{ e }}</td><td class="num">{{ n }}</td><td class="ancho">{{ barra(n, m, '#a43a28') }}</td></tr>{% else %}<tr><td>Sin síntomas reportados.</td></tr>{% endfor %}</table>
+    <h2>Síntomas repetidos <span class="nota">· 30 días</span></h2>
+    <div class="tabla"><table>
+      <tr><th>Persona</th><th class="num">Días</th><th>Último</th><th>Qué reportó</th></tr>
+      {% for p in recurrentes %}
+      <tr><td class="sin-salto"><a href="/tablero?persona={{ p.persona|urlencode }}">{{ p.nombre }}</a></td><td class="num {{ 'alto' if p.dias >= 3 }}">{{ p.dias }}</td><td class="sin-salto">{{ p.ultimo }}</td><td>{{ p.sintomas }}</td></tr>
+      {% else %}<tr><td colspan="4">Nadie ha reportado síntomas más de una vez.</td></tr>{% endfor %}
+    </table></div>
   </section>
   <section>
-    <h2>BPM, dotación y EPP (90 días)</h2>
-    {% set m = problemas[0][1] if problemas else 0 %}
-    <table>{% for e, n in problemas %}<tr><td>{{ e }}</td><td class="num">{{ n }}</td><td class="ancho">{{ barra(n, m, '#57534a') }}</td></tr>{% endfor %}</table>
+    <h2>Reinciden en BPM, EPP o dotación <span class="nota">· 30 días</span></h2>
+    <div class="tabla"><table>
+      <tr><th>Persona</th><th class="num">BPM</th><th class="num">EPP</th><th class="num">Dotación</th></tr>
+      {% for p in reincidentes %}
+      <tr><td class="sin-salto"><a href="/tablero?persona={{ p.persona|urlencode }}">{{ p.nombre }}</a></td>
+        <td class="num {{ 'alto' if p.bpm >= 3 }}">{{ p.bpm or '' }}</td><td class="num {{ 'alto' if p.epp >= 3 }}">{{ p.epp or '' }}</td><td class="num {{ 'alto' if p.dotacion >= 3 }}">{{ p.dotacion or '' }}</td></tr>
+      {% else %}<tr><td colspan="4">Nadie repite incumplimientos.</td></tr>{% endfor %}
+    </table></div>
+    <p class="nota">Chequeos con la novedad en los últimos 30 días. En rojo, 3 o más.</p>
+  </section>
+</div>
+
+<div class="columnas">
+  <section>
+    <h2>Por lugar <span class="nota">· 90 días</span></h2>
+    <div class="tabla"><table>
+      <tr><th>Lugar</th><th class="num">Chequeos</th><th class="num">Síntomas</th><th class="num">BPM</th><th class="num">EPP</th></tr>
+      {% for l in lugares %}<tr><td>{{ l.lugar }}</td><td class="num">{{ l.chequeos }}</td>
+        {% for c in ['salud', 'bpm', 'epp'] %}<td class="num" title="{{ l[c] }} de {{ l.chequeos }} chequeos">{{ (100 * l[c] / l.chequeos)|round|int }}%</td>{% endfor %}</tr>{% endfor %}
+    </table></div>
+    <p class="nota">Porcentaje de chequeos con al menos una novedad de ese tipo.</p>
+  </section>
+  <section>
+    <h2>Quién hace los chequeos <span class="nota">· 90 días</span></h2>
+    <div class="tabla"><table>
+      <tr><th>Responsable</th><th class="num">Chequeos</th><th class="num">Con novedad</th><th class="num">Síntomas</th></tr>
+      {% for r in responsables %}<tr><td>{{ r.responsable }}</td><td class="num">{{ r.chequeos }}</td>
+        <td class="num">{{ (100 * r.con_novedad / r.chequeos)|round|int }}%</td><td class="num">{{ (100 * r.salud / r.chequeos)|round|int }}%</td></tr>{% endfor %}
+    </table></div>
+    <p class="nota">Si un responsable casi nunca registra novedades, conviene revisar cómo hace el chequeo.</p>
   </section>
 </div>
 
 <section>
-  <h2>Personas con síntomas repetidos (30 días)</h2>
-  <div class="tabla"><table>
-    <tr><th>Persona</th><th>Días con síntomas</th><th>Último</th><th>Qué reportó</th></tr>
-    {% for p in recurrentes %}
-    <tr><td><a href="/persona/{{ p.persona|urlencode }}">{{ p.nombre }}</a></td><td class="{{ 'alto' if p.dias >= 3 }}">{{ p.dias }}</td><td>{{ p.ultimo }}</td><td>{{ p.sintomas }}</td></tr>
-    {% else %}<tr><td colspan="4">Nadie ha reportado síntomas más de una vez.</td></tr>{% endfor %}
-  </table></div>
+  <h2>Evolución mensual</h2>
+  {{ g.meses(por_mes, [('eta', 'ETA'), ('salud', 'Síntomas'), ('bpm', 'BPM'), ('epp', 'EPP'), ('dotacion', 'Dotación')]) }}
 </section>
-
-<div class="columnas">
-  <section>
-    <h2>Por lugar (90 días)</h2>
-    <table><tr><th>Lugar</th><th>Chequeos</th><th>Con síntomas</th><th>%</th></tr>
-      {% for l in lugares %}<tr><td>{{ l.lugar }}</td><td>{{ l.respuestas }}</td><td>{{ l.salud }}</td><td>{{ (100 * l.salud / l.respuestas)|round(1) }}%</td></tr>{% endfor %}
-    </table>
-  </section>
-  <section>
-    <h2>Evolución mensual</h2>
-    <div class="tabla"><table><tr><th>Mes</th><th>Chequeos</th><th>ETA</th><th>Síntomas</th><th>BPM</th><th>Dotación</th><th>EPP</th></tr>
-      {% for m in por_mes %}<tr><td>{{ m.mes }}</td><td>{{ m.respuestas }}</td><td>{{ m.eta or 0 }}</td><td>{{ m.salud or 0 }}</td><td>{{ m.bpm or 0 }}</td><td>{{ m.dotacion or 0 }}</td><td>{{ m.epp or 0 }}</td></tr>{% endfor %}
-    </table></div>
-  </section>
-</div>
+{% endif %}
 {% endblock %}

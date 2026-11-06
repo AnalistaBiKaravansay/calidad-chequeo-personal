@@ -35,7 +35,7 @@
   <tr>
     <td>{{ r.id }}</td>
     <td class="sin-salto"><a href="/?dia={{ r.dia }}">{{ r.fecha[:16] }}</a></td>
-    <td><a href="/persona/{{ r.persona|urlencode }}">{{ r.nombre }}</a></td>
+    <td><a href="/tablero?persona={{ r.persona|urlencode }}">{{ r.nombre }}</a></td>
     <td class="sin-salto">{{ r.lugar }}</td>
     <td>{{ r.responsable }}</td>
     <td>{% for n in r.novedades %}<span class="etiqueta" style="background:{{ COLORES[n.tipo] }}">{{ NOMBRE_TIPO[n.tipo] }}</span> {{ n.etiqueta }}<br>{% endfor %}</td>

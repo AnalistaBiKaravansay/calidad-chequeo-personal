@@ -98,6 +98,7 @@ def main():
     elif a.orden == "compactar":
         with closing(datos.conectar()) as con:
             print("Respuestas pasadas al formato compacto:", datos.compactar(con))
+            print("Nombres sin numeración (misma persona unificada):", datos.unificar_personas(con))
             if con.postgres:
                 # VACUUM FULL reescribe la tabla y devuelve el espacio liberado (no puede ir en una transacción).
                 con.cruda.autocommit = True

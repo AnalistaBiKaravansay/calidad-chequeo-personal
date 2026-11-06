@@ -1,0 +1,32 @@
+{# Gráficas sencillas en HTML y CSS (sin JavaScript): barras de un solo color dentro de tablas, así cada gráfica
+   es también su tabla de datos. Al pasar el mouse, el título muestra el valor exacto. #}
+
+{% macro barra(valor, maximo, titulo='', ancho=160) -%}
+<span class="barra-fondo" style="max-width:{{ ancho }}px" title="{{ titulo or valor }}"><span class="barra-valor" style="width:{{ ((100 * valor / maximo) if maximo else 0)|round(1) }}%"></span></span>
+{%- endmacro %}
+
+{# Lista ordenada (etiqueta, número) con barra proporcional al primero. #}
+{% macro ranking(items, vacio) -%}
+{% set m = items[0][1] if items else 0 %}
+<table class="ranking">
+  {% for etiqueta, n in items %}
+  <tr><td>{{ etiqueta }}</td><td class="num">{{ n }}</td><td class="ancho">{{ barra(n, m, n ~ ' veces: ' ~ etiqueta) }}</td></tr>
+  {% else %}<tr><td class="nota">{{ vacio }}</td></tr>{% endfor %}
+</table>
+{%- endmacro %}
+
+{# Meses: chequeos con barra y, por cada indicador, cuántos y qué porcentaje de los chequeos del mes. #}
+{% macro meses(por_mes, columnas) -%}
+{% set m = por_mes|map(attribute='chequeos')|max if por_mes else 0 %}
+<div class="tabla"><table>
+  <tr><th>Mes</th><th>Chequeos</th>{% for c, t in columnas %}<th class="num">{{ t }}</th>{% endfor %}</tr>
+  {% for fila in por_mes %}
+  <tr><td class="sin-salto">{{ fila.mes }}</td>
+    <td class="sin-salto">{{ barra(fila.chequeos, m, fila.chequeos ~ ' chequeos en ' ~ fila.mes, 120) }} {{ fila.chequeos }}</td>
+    {% for c, t in columnas %}{% set v = fila[c] or 0 %}
+    <td class="num sin-salto" title="{{ v }} de {{ fila.chequeos }} chequeos">{% if v %}{{ v }} <span class="nota">{{ (100 * v / fila.chequeos)|round|int }}%</span>{% else %}<span class="nota">—</span>{% endif %}</td>
+    {% endfor %}
+  </tr>
+  {% endfor %}
+</table></div>
+{%- endmacro %}
