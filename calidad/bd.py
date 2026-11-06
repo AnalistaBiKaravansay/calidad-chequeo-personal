@@ -25,9 +25,10 @@ def _fabrica_filas(cursor):
 class Conexion:
     """Envoltura mínima. `with con:` confirma los cambios al salir (o los deshace si hubo error) sin cerrar."""
 
-    def __init__(self, cruda, postgres):
+    def __init__(self, cruda, postgres, ident=""):
         self.cruda = cruda
         self.postgres = postgres
+        self.ident = ident   # identifica la base (para la memoria de datos.registros)
 
     def _sql(self, sql):
         # En psycopg el % es especial y los parámetros van con %s.
@@ -74,7 +75,7 @@ class Conexion:
 def abrir(url="", archivo_sqlite=None):
     if url:
         import psycopg
-        return Conexion(psycopg.connect(url, connect_timeout=20), postgres=True)
+        return Conexion(psycopg.connect(url, connect_timeout=20), postgres=True, ident=url)
     cruda = sqlite3.connect(archivo_sqlite)
     cruda.row_factory = sqlite3.Row
-    return Conexion(cruda, postgres=False)
+    return Conexion(cruda, postgres=False, ident=str(archivo_sqlite))

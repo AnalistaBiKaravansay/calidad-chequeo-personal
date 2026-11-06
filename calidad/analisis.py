@@ -1,10 +1,13 @@
-"""Novedades del día con historial por persona, alertas de patrones y cifras del tablero."""
+"""Novedades del día con historial por persona, alertas de patrones y cifras del tablero.
+
+Todo se calcula sobre datos.registros (las respuestas en memoria): una página no hace consultas grandes a la base.
+"""
 from collections import Counter, defaultdict
 from datetime import date, timedelta
 
 from . import guia
-from .datos import filas
-from .reglas import ETIQUETAS, PRIORIDAD
+from .datos import registros
+from .reglas import PRIORIDAD
 
 SALUD = ("eta", "salud")
 GRUPOS = {
@@ -43,10 +46,17 @@ def _es_salud(novedad):
     return novedad["tipo"] in SALUD and novedad["clave"] != "embarazo"
 
 
+def _entre(con, desde, hasta, incluir_desde=True):
+    """Respuestas con desde <= dia <= hasta (o desde < dia si incluir_desde es False)."""
+    return [r for r in registros(con)
+            if (r["dia"] >= desde if incluir_desde else r["dia"] > desde) and r["dia"] <= hasta]
+
+
 def historial(con, dia, dias):
     """persona -> {clave: [días], '_salud': {días con algún síntoma}} antes del día indicado."""
     h = defaultdict(lambda: defaultdict(set))
-    for r in filas(con, "SELECT dia, persona, novedades FROM respuestas WHERE dia>=? AND dia<?", _restar(dia, dias), dia):
+    desde = _restar(dia, dias)
+    for r in (r for r in registros(con) if desde <= r["dia"] < dia):
         for n in r["novedades"]:
             h[r["persona"]][n["clave"]].add(r["dia"])
             if _es_salud(n):
@@ -66,12 +76,14 @@ def umbrales(con, hasta):
     Para cada reporte de un síntoma se cuenta en cuántos días de los últimos 30 lo tuvo la misma persona.
     Seguimiento = percentil 75 de esos conteos; cita médica = percentil 90.
     """
-    llave = (hasta, con.execute("SELECT count(*) FROM respuestas").fetchone()[0])
+    todas = registros(con)
+    llave = (hasta, id(todas))   # la lista en memoria cambia cuando cambian los datos
     if llave in _umbrales:
         return _umbrales[llave]
+    if len(_umbrales) > 50:
+        _umbrales.clear()
     dias = defaultdict(set)
-    for r in filas(con, "SELECT dia, persona, novedades FROM respuestas WHERE dia>? AND dia<=?",
-                   _restar(hasta, 365), hasta):
+    for r in _entre(con, _restar(hasta, 365), hasta, incluir_desde=False):
         for n in r["novedades"]:
             if n["tipo"] in ("salud", "lesion"):
                 dias[(r["persona"], n["clave"])].add(r["dia"])
@@ -98,7 +110,7 @@ def nivel(veces, limites):
 
 
 def novedades_del_dia(con, dia, dias=30):
-    respuestas = filas(con, "SELECT * FROM respuestas WHERE dia=? ORDER BY fecha", dia)
+    respuestas = [r for r in registros(con) if r["dia"] == dia]
     hist = historial(con, dia, dias)
     limites = umbrales(con, dia)
     casos = []
@@ -128,13 +140,12 @@ def novedades_del_dia(con, dia, dias=30):
 def alertas_patrones(con, dia):
     """Señales de algo anormal: varias personas con síntomas parecidos o un aumento semanal."""
     alertas = []
-    registros = filas(con, "SELECT dia, persona, lugar, novedades FROM respuestas WHERE dia>? AND dia<=?",
-                      _restar(dia, 63), dia)
+    del_periodo = _entre(con, _restar(dia, 63), dia, incluir_desde=False)
     con_sintoma = lambda r, claves: any(_es_salud(n) and n["clave"] in claves for n in r["novedades"])
     avisados = set()
     for descripcion, claves, minimo in BROTE:
         hoy = defaultdict(set)
-        for r in registros:
+        for r in del_periodo:
             if r["dia"] == dia and con_sintoma(r, claves):
                 hoy[r["lugar"]].add(r["persona"])
         for lugar, personas in sorted(hoy.items()):
@@ -145,7 +156,7 @@ def alertas_patrones(con, dia):
                     "turno, agua o alimentos y avisar a Calidad como posible brote."})
     for grupo, claves in GRUPOS.items():
         semana, base = set(), set()
-        for r in registros:
+        for r in del_periodo:
             if con_sintoma(r, claves):
                 (semana if r["dia"] > _restar(dia, 7) else base).add((r["persona"], r["dia"]))
         promedio = len(base) / 8
@@ -164,12 +175,9 @@ def resumen_dia(respuestas, casos):
 
 def tablero(con, hasta, lugar="", persona=""):
     """Cifras para el tablero histórico. 'hasta' es el último día con datos; 'persona' es la clave normalizada."""
-    filtro, args = "", []
-    if lugar:
-        filtro += " AND lugar=?"; args.append(lugar)
-    if persona:
-        filtro += " AND persona=?"; args.append(persona)
-    todas = filas(con, f"SELECT dia, persona, nombre, lugar, novedades FROM respuestas WHERE dia<=? {filtro}", hasta, *args)
+    base = registros(con)
+    todas = [r for r in base if r["dia"] <= hasta and (not lugar or r["lugar"] == lugar)
+             and (not persona or r["persona"] == persona)]
 
     meses = defaultdict(Counter)
     for r in todas:
@@ -216,36 +224,26 @@ def tablero(con, hasta, lugar="", persona=""):
         "problemas": problemas.most_common(12),
         "lugares": sorted(({"lugar": k, **v} for k, v in lugares.items()), key=lambda x: -x["respuestas"]),
         "recurrentes": personas[:25],
-        "lista_lugares": [r[0] for r in con.execute("SELECT DISTINCT lugar FROM respuestas ORDER BY lugar")],
-        "lista_personas": [r[0] for r in con.execute("SELECT max(nombre) FROM respuestas GROUP BY persona ORDER BY 1")],
+        "lista_lugares": base.lugares,
+        "lista_personas": base.personas,
     }
 
 
 def persona(con, clave):
-    registros = filas(con, "SELECT * FROM respuestas WHERE persona=? ORDER BY fecha DESC", clave)
-    conteo = Counter(n["etiqueta"] for r in registros for n in r["novedades"])
-    return registros, conteo.most_common()
+    del_historial = [r for r in reversed(registros(con)) if r["persona"] == clave]
+    conteo = Counter(n["etiqueta"] for r in del_historial for n in r["novedades"])
+    return del_historial, conteo.most_common()
 
 
 def tabla(con, desde, hasta, lugar="", persona="", tipo="", texto="", limite=None, desplazamiento=0):
     """Respuestas filtradas para la pestaña Datos. tipo: '' todas, 'con' con alguna novedad, o un tipo de novedad.
-    Devuelve (filas, total)."""
-    condiciones, args = ["dia>=?", "dia<=?"], [desde, hasta]
-    if lugar:
-        condiciones.append("lugar=?"); args.append(lugar)
-    if persona:
-        condiciones.append("persona=?"); args.append(persona)
-    if tipo == "con":
-        condiciones.append("novedades<>'[]'")
-    elif tipo:
-        condiciones.append("novedades LIKE ?"); args.append(f'%"tipo": "{tipo}"%')
-    if texto:
-        condiciones.append("lower(observacion) LIKE lower(?)"); args.append(f"%{texto}%")
-    where = " AND ".join(condiciones)
-    total = con.execute(f"SELECT count(*) FROM respuestas WHERE {where}", args).fetchone()[0]
-    paginado = f" LIMIT {int(limite)} OFFSET {int(desplazamiento)}" if limite else ""
-    return filas(con, f"SELECT * FROM respuestas WHERE {where} ORDER BY fecha DESC{paginado}", *args), total
-
-
-def etiqueta(clave):
-    return ETIQUETAS.get(clave, clave)
+    Devuelve (filas, total), de la más reciente a la más antigua. Las filas son copias: se pueden modificar."""
+    texto = texto.lower()
+    elegidas = [r for r in reversed(registros(con))
+                if desde <= r["dia"] <= hasta and (not lugar or r["lugar"] == lugar)
+                and (not persona or r["persona"] == persona)
+                and (tipo != "con" or r["novedades"])
+                and (tipo in ("", "con") or any(n["tipo"] == tipo for n in r["novedades"]))
+                and (not texto or texto in (r["observacion"] or "").lower())]
+    pagina = elegidas[desplazamiento:desplazamiento + limite] if limite else elegidas
+    return [dict(r) for r in pagina], len(elegidas)

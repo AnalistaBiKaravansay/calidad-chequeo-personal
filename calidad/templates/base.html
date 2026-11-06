@@ -3,28 +3,37 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Calidad · Chequeo de personal</title>
-  <link rel="stylesheet" href="/static/estilo.css">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{% block titulo %}Chequeo de personal{% endblock %} · Calidad Karavansay</title>
+  <link rel="icon" href="/static/logo.svg?v={{ V }}" type="image/svg+xml">
+  <link rel="preload" href="/static/logo.svg?v={{ V }}" as="image">
+  <link rel="stylesheet" href="/static/estilo.css?v={{ V }}">
 </head>
 <body>
-  <header>
-    <strong>Calidad · Chequeo de personal</strong>
-    <nav>
-      <a href="/" class="{{ 'activo' if pagina == 'hoy.html' }}">Reporte del día</a>
-      <a href="/tablero" class="{{ 'activo' if pagina == 'tablero.html' }}">Tablero</a>
-      <a href="/datos" class="{{ 'activo' if pagina == 'datos.html' }}">Datos</a>
-      <a href="/guia" class="{{ 'activo' if pagina == 'guia.html' }}">Guía</a>
-    </nav>
-    <span class="espacio"></span>
-    <form method="post" action="/recargar">
-      <input type="hidden" name="volver" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
-      <button class="recargar" title="{{ 'Ver cuándo subió datos el PC puente' if NUBE else 'Leer ahora las respuestas nuevas del Forms' }}">⟳ Recargar</button>
-    </form>
-    {% if request.cookies.get('calidad_sesion') %}<a class="salir" href="/salir">Salir</a>{% endif %}
+  <header class="cabecera">
+    <div class="cabecera-dentro">
+      <a class="marca" href="/" aria-label="Inicio">
+        <img src="/static/logo.svg?v={{ V }}" alt="Karavansay" width="99" height="44">
+        <span><b>Calidad</b><small>Chequeo de personal</small></span>
+      </a>
+      <nav class="menu" aria-label="Secciones">
+        {% for ruta, plantilla, texto in [('/', 'hoy.html', 'Reporte del día'), ('/tablero', 'tablero.html', 'Tablero'), ('/datos', 'datos.html', 'Datos'), ('/guia', 'guia.html', 'Guía')] %}
+        <a href="{{ ruta }}" {% if pagina == plantilla %}aria-current="page"{% endif %}>{{ texto }}</a>
+        {% endfor %}
+      </nav>
+      <div class="acciones">
+        <form method="post" action="/recargar">
+          <input type="hidden" name="volver" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+          <button class="discreto" title="{{ 'Ver cuándo subió datos el PC puente' if NUBE else 'Leer ahora las respuestas nuevas del Forms' }}">⟳ Recargar</button>
+        </form>
+        {% if request.cookies.get('calidad_sesion') %}<a class="boton discreto" href="/salir">Salir</a>{% endif %}
+      </div>
+    </div>
   </header>
   <main>
-    {% if request.query_params.get('mensaje') %}<div class="mensaje">{{ request.query_params.get('mensaje') }}</div>{% endif %}
+    {% if request.query_params.get('mensaje') %}<div class="mensaje" role="status">{{ request.query_params.get('mensaje') }}</div>{% endif %}
     {% block contenido %}{% endblock %}
   </main>
+  <footer class="pie">Karavansay · Alimentos naturales — Área de Calidad. Información de salud del personal: uso interno.</footer>
 </body>
 </html>

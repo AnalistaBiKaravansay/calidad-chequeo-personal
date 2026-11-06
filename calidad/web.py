@@ -7,7 +7,6 @@ import csv
 import hashlib
 import hmac
 import io
-import json
 import time
 from contextlib import closing
 from datetime import date, timedelta
@@ -16,13 +15,20 @@ from typing import Optional
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit
 
 from fastapi import FastAPI, Form, Request
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import analisis, config, datos, diario, guia, ia, reglas, reporte
 
+ESTATICOS = Path(__file__).parent / "static"
+# Cambia cuando cambian el estilo o el logo: el navegador los guarda un año y los vuelve a pedir solo entonces.
+VERSION_ESTATICOS = hashlib.sha1(b"".join(p.read_bytes() for p in sorted(ESTATICOS.iterdir()) if p.is_file())
+                                 ).hexdigest()[:8]
+
 app = FastAPI(title="Calidad Karavansay", docs_url=None, redoc_url=None)
-app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
+app.mount("/static", StaticFiles(directory=ESTATICOS), name="static")
+app.add_middleware(GZipMiddleware, minimum_size=800)   # las páginas viajan comprimidas (unas 5 veces menos)
 _ultima_sincronizacion = 0.0
 
 COOKIE = "calidad_sesion"
@@ -47,7 +53,11 @@ def _sesion_valida(valor):
 async def exigir_clave(request: Request, siguiente):
     """Sin CALIDAD_CLAVE (uso local) no se pide nada. Con clave, todo menos /login y /static exige sesión."""
     ruta = request.url.path
-    if (not config.clave_pagina() or ruta in ("/login", "/salud") or ruta.startswith("/static")
+    if ruta.startswith("/static"):
+        respuesta = await siguiente(request)
+        respuesta.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return respuesta
+    if (not config.clave_pagina() or ruta in ("/login", "/salud")
             or _sesion_valida(request.cookies.get(COOKIE, ""))):
         return await siguiente(request)
     volver = ruta + (f"?{request.url.query}" if request.url.query else "")
@@ -96,19 +106,20 @@ def conexion():
 
 
 def pagina(plantilla, request, **contexto):
-    html = reporte.plantillas.get_template(plantilla).render(request=request, pagina=plantilla,
+    html = reporte.plantillas.get_template(plantilla).render(request=request, pagina=plantilla, V=VERSION_ESTATICOS,
                                                              NUBE=config.en_nube(), **contexto)
-    return HTMLResponse(html)
+    # Datos de salud: el navegador no debe guardar copias de la página.
+    return HTMLResponse(html, headers={"Cache-Control": "private, no-store"})
 
 
-def dias_con_datos(con):
-    return [r[0] for r in con.execute("SELECT DISTINCT dia FROM respuestas ORDER BY dia")]
+def _ultimo_dia(con):
+    return datos.registros(con).ultima[:10] or date.today().isoformat()
 
 
 @app.get("/")
 def hoy(request: Request, dia: str = "", mensaje: str = ""):
     with closing(conexion()) as con:
-        dias = dias_con_datos(con)
+        dias = datos.registros(con).dias
         hoy_ = date.today().isoformat()
         dia = dia or (hoy_ if hoy_ in dias else (dias[-1] if dias else hoy_))
         previos, siguientes = [d for d in dias if d < dia], [d for d in dias if d > dia]
@@ -151,7 +162,7 @@ def tablero(request: Request, lugar: str = "", persona: str = ""):
     persona = persona.strip()
     clave = reglas.clave_persona(persona) if persona else ""
     with closing(conexion()) as con:
-        hasta = datos.ultima_respuesta(con)[:10] or date.today().isoformat()
+        hasta = _ultimo_dia(con)
         cifras = analisis.tablero(con, hasta, lugar, clave)
     return pagina("tablero.html", request, hasta=hasta, lugar=lugar, persona=persona, persona_clave=clave, **cifras)
 
@@ -191,8 +202,7 @@ POR_PAGINA = 100
 
 
 def _filtros_datos(con, desde, hasta, lugar, persona, tipo, texto):
-    ultimo = datos.ultima_respuesta(con)[:10] or date.today().isoformat()
-    hasta = hasta or ultimo
+    hasta = hasta or _ultimo_dia(con)
     desde = desde or (date.fromisoformat(hasta) - timedelta(days=6)).isoformat()
     clave = reglas.clave_persona(persona) if persona.strip() else ""
     return dict(desde=desde, hasta=hasta, lugar=lugar, persona=clave, tipo=tipo, texto=texto.strip())
@@ -205,11 +215,13 @@ def ver_datos(request: Request, desde: str = "", hasta: str = "", lugar: str = "
         f = _filtros_datos(con, desde, hasta, lugar, persona, tipo, texto)
         pagina_num = max(1, pagina_num)
         registros, total = analisis.tabla(con, **f, limite=POR_PAGINA, desplazamiento=(pagina_num - 1) * POR_PAGINA)
-        lugares = [r[0] for r in con.execute("SELECT DISTINCT lugar FROM respuestas ORDER BY lugar")]
-        personas = [r[0] for r in con.execute("SELECT max(nombre) FROM respuestas GROUP BY persona ORDER BY 1")]
-    columnas = list(json.loads(registros[0]["crudo"]).keys()) if completa and registros else []
+        todos = datos.registros(con)
+        lugares, personas = todos.lugares, todos.personas
+        # La fila completa del Excel solo se pide a la base si se marcó "todas las columnas", y solo de esta página.
+        completos = datos.crudos(con, [r["id"] for r in registros]) if completa and registros else {}
+    columnas = list(next(iter(completos.values())).keys()) if completos else []
     for r in registros:
-        r["crudo"] = json.loads(r["crudo"]) if completa else {}
+        r["crudo"] = completos.get(r["id"], {})
     consulta = {k: v for k, v in dict(request.query_params).items() if k != "pagina_num"}
     return pagina("datos.html", request, registros=registros, total=total, pagina_num=pagina_num,
                   paginas=max(1, -(-total // POR_PAGINA)), columnas=columnas, completa=completa,
@@ -224,12 +236,13 @@ def descargar_datos(desde: str = "", hasta: str = "", lugar: str = "", persona: 
     with closing(conexion()) as con:
         f = _filtros_datos(con, desde, hasta, lugar, persona, tipo, texto)
         registros, _ = analisis.tabla(con, **f)
+        completos = datos.crudos(con, [r["id"] for r in registros]) if completa and registros else {}
     salida = io.StringIO()
     escritor = csv.writer(salida, delimiter=";")   # punto y coma: así lo abre bien Excel en español
-    columnas = list(json.loads(registros[0]["crudo"]).keys()) if completa and registros else []
+    columnas = list(next(iter(completos.values())).keys()) if completos else []
     escritor.writerow(["Id", "Fecha", "Persona", "Lugar", "Revisó", "Novedades", "Observación"] + columnas)
     for r in registros:
-        crudo = json.loads(r["crudo"])
+        crudo = completos.get(r["id"], {})
         escritor.writerow([r["id"], r["fecha"], r["nombre"], r["lugar"], r["responsable"],
                            " | ".join(n["etiqueta"] for n in r["novedades"]), r["observacion"]]
                           + [crudo.get(c, "") for c in columnas])
@@ -241,7 +254,7 @@ def descargar_datos(desde: str = "", hasta: str = "", lugar: str = "", persona: 
 @app.get("/guia")
 def ver_guia(request: Request):
     with closing(conexion()) as con:
-        limites = dict(analisis.umbrales(con, datos.ultima_respuesta(con)[:10] or date.today().isoformat()))
+        limites = dict(analisis.umbrales(con, _ultimo_dia(con)))
         aprendizaje = ia.resumen_aprendizaje(con)
     return pagina("guia.html", request, g=guia, r=reglas, limites=limites, aprendizaje=aprendizaje,
                   minimos=(analisis.MINIMO_SEGUIMIENTO, analisis.MINIMO_MEDICO))

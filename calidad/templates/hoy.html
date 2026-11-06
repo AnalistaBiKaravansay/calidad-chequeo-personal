@@ -1,21 +1,26 @@
 {% extends "base.html" %}
+{% block titulo %}Reporte del {{ dia }}{% endblock %}
 {% block contenido %}
-<div class="barra">
-  {% if anterior %}<a class="boton" href="/?dia={{ anterior }}">← {{ anterior }}</a>{% endif %}
-  <form method="get" action="/"><input type="date" name="dia" value="{{ dia }}" onchange="this.form.submit()"></form>
-  {% if siguiente %}<a class="boton" href="/?dia={{ siguiente }}">{{ siguiente }} →</a>{% endif %}
-  <span class="espacio"></span>
-  {% if ia.estado != 'ok' and ia.estado != 'sin casos' %}
-  <form method="post" action="/ia" onsubmit="var b=this.querySelector('button'); b.disabled=true; b.textContent='Consultando la IA, espere…';">
-    <input type="hidden" name="dia" value="{{ dia }}"><button>Pedir consejos a la IA</button>
-  </form>
-  {% endif %}
-  {% if not NUBE %}
-  <form method="post" action="/enviar" onsubmit="return confirm('¿Enviar el reporte del {{ dia }} por correo?')">
-    <input type="hidden" name="dia" value="{{ dia }}"><button>Enviar por correo</button>
-  </form>
-  {% endif %}
+<div class="encabezado">
+  <div>
+    <h1>Reporte del día</h1>
+    <div class="nota">{{ dia|fecha_larga|capitalize }}{% if enviado %} · enviado por correo el {{ enviado }}{% endif %}</div>
+  </div>
+  <div class="barra">
+    {% if anterior %}<a class="boton" href="/?dia={{ anterior }}" title="Día anterior con datos">← {{ anterior }}</a>{% endif %}
+    <form method="get" action="/"><input type="date" name="dia" value="{{ dia }}" onchange="this.form.submit()" aria-label="Elegir día"></form>
+    {% if siguiente %}<a class="boton" href="/?dia={{ siguiente }}" title="Día siguiente con datos">{{ siguiente }} →</a>{% endif %}
+    {% if ia.estado != 'ok' and ia.estado != 'sin casos' %}
+    <form method="post" action="/ia" onsubmit="var b=this.querySelector('button'); b.disabled=true; b.textContent='Consultando la IA, espere…';">
+      <input type="hidden" name="dia" value="{{ dia }}"><button class="principal">Pedir consejos a la IA</button>
+    </form>
+    {% endif %}
+    {% if not NUBE %}
+    <form method="post" action="/enviar" onsubmit="return confirm('¿Enviar el reporte del {{ dia }} por correo?')">
+      <input type="hidden" name="dia" value="{{ dia }}"><button>Enviar por correo</button>
+    </form>
+    {% endif %}
+  </div>
 </div>
-{% if enviado %}<div class="nota">Este reporte se envió por correo el {{ enviado }}.</div>{% endif %}
-{% include "_reporte.html" %}
+<div class="reporte">{% include "_reporte.html" %}</div>
 {% endblock %}

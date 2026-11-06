@@ -1,18 +1,18 @@
 {% extends "base.html" %}
 {% macro barra(valor, maximo, color) %}<span class="barra-fondo"><span class="barra-valor" style="width:{{ (100 * valor / maximo)|round(1) if maximo else 0 }}%;background:{{ color }}"></span></span>{% endmacro %}
+{% block titulo %}Tablero{% endblock %}
 {% block contenido %}
-<div class="barra">
+<div class="encabezado">
   <h1>Tablero histórico</h1>
-  <span class="espacio"></span>
   <form method="get" class="barra">
-    <select name="lugar" onchange="this.form.submit()">
+    <select name="lugar" onchange="this.form.submit()" aria-label="Lugar">
       <option value="">Todos los lugares</option>
       {% for l in lista_lugares %}<option {{ 'selected' if l == lugar }}>{{ l }}</option>{% endfor %}
     </select>
     <input type="search" name="persona" list="personas" value="{{ persona }}" placeholder="Buscar persona…"
-           onchange="this.form.submit()" style="min-width:220px">
+           onchange="this.form.submit()" style="min-width:220px" aria-label="Buscar persona">
     <datalist id="personas">{% for p in lista_personas %}<option value="{{ p }}">{% endfor %}</datalist>
-    <button>Filtrar</button>
+    <button class="principal">Filtrar</button>
     {% if lugar or persona %}<a class="boton" href="/tablero">Quitar filtros</a>{% endif %}
   </form>
 </div>
@@ -33,7 +33,7 @@
     <tr><th>Semana del</th><th>Chequeos</th>{% for g in grupos %}<th>{{ g|capitalize }}</th>{% endfor %}</tr>
     {% for s in semanas %}
     <tr><td>{{ s.semana }}</td><td>{{ s.respuestas }}</td>
-      {% for g in grupos %}{% set v = s[g] or 0 %}<td class="{{ 'alto' if v >= 5 }}">{{ v }} {{ barra(v, 15, '#ef6c00') }}</td>{% endfor %}
+      {% for g in grupos %}{% set v = s[g] or 0 %}<td class="{{ 'alto' if v >= 5 }}">{{ v }} {{ barra(v, 15, '#b45309') }}</td>{% endfor %}
     </tr>
     {% endfor %}
   </table></div>
@@ -43,12 +43,12 @@
   <section>
     <h2>Síntomas más reportados (90 días)</h2>
     {% set m = sintomas[0][1] if sintomas else 0 %}
-    <table>{% for e, n in sintomas %}<tr><td>{{ e }}</td><td class="num">{{ n }}</td><td class="ancho">{{ barra(n, m, '#c62828') }}</td></tr>{% else %}<tr><td>Sin síntomas reportados.</td></tr>{% endfor %}</table>
+    <table>{% for e, n in sintomas %}<tr><td>{{ e }}</td><td class="num">{{ n }}</td><td class="ancho">{{ barra(n, m, '#a43a28') }}</td></tr>{% else %}<tr><td>Sin síntomas reportados.</td></tr>{% endfor %}</table>
   </section>
   <section>
     <h2>BPM, dotación y EPP (90 días)</h2>
     {% set m = problemas[0][1] if problemas else 0 %}
-    <table>{% for e, n in problemas %}<tr><td>{{ e }}</td><td class="num">{{ n }}</td><td class="ancho">{{ barra(n, m, '#546e7a') }}</td></tr>{% endfor %}</table>
+    <table>{% for e, n in problemas %}<tr><td>{{ e }}</td><td class="num">{{ n }}</td><td class="ancho">{{ barra(n, m, '#57534a') }}</td></tr>{% endfor %}</table>
   </section>
 </div>
 

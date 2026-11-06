@@ -236,19 +236,35 @@ def pasos_para(novedad, repeticiones=0, nivel=None, limites=None):
     return pasos
 
 
-def texto_para_ia():
-    """Versión compacta de la guía que se envía a la IA como única base."""
-    lineas = ["FUENTES: " + "; ".join(f"[{k}] {v}" for k, v in FUENTES.items()),
-              f"SÍNTOMAS DE ALERTA DE POSIBLE ETA [PI]. Acción: {ACCION_ETA} Reintegro: {REINTEGRO_ETA}"]
-    for clave, d in ETA.items():
-        lineas.append(f"- {clave}: {d['explicacion']} Nota: {d['nota']}")
-    lineas.append("PASOS ETA: " + " | ".join(PASOS_ETA))
+def texto_para_ia(tipos=None, claves=None):
+    """Versión compacta de la guía que se envía a la IA como única base.
+
+    Con tipos y claves (los de los casos que se consultan) solo se envían las partes que aplican: la consulta
+    gasta menos y la IA se distrae menos. Sin ellos, la guía completa."""
+    aplica_tipo = lambda t: tipos is None or t in tipos
+    aplica_clave = lambda c: claves is None or c in claves
+    lineas = ["FUENTES: " + "; ".join(f"[{k}] {v}" for k, v in FUENTES.items())]
+    # La parte ETA va también si un síntoma ETA solo se mencionó en la observación (sirve para verificarlo).
+    eta_mencionada = claves is not None and bool(claves & ETA.keys())
+    if aplica_tipo("eta") or eta_mencionada:
+        lineas.append(f"SÍNTOMAS DE ALERTA DE POSIBLE ETA [PI]. Acción: {ACCION_ETA} Reintegro: {REINTEGRO_ETA}")
+        for clave, d in ETA.items():
+            if aplica_tipo("eta") or aplica_clave(clave):
+                lineas.append(f"- {clave}: {d['explicacion']} Nota: {d['nota']}")
+        if aplica_tipo("eta"):
+            lineas.append("PASOS ETA: " + " | ".join(PASOS_ETA))
     for tipo, pasos in PASOS.items():
-        lineas.append(f"PASOS {tipo.upper()}: " + " | ".join(pasos))
+        if aplica_tipo(tipo):
+            lineas.append(f"PASOS {tipo.upper()}: " + " | ".join(pasos))
     for clave, consejos in CONSEJO_INMEDIATO.items():
-        lineas.append(f"CONSEJO INMEDIATO {clave}: " + " | ".join(consejos))
-    lineas.append("ESCALERA (síntomas no ETA): nivel 1 = consejo inmediato; nivel 2 = seguimiento con la persona "
-                  "(y SST si es dolor muscular o lesión); nivel 3 = sugerir cita con la EPS.")
-    lineas.append("BPM: " + " | ".join(BPM_ESPECIFICO.values()))
-    lineas.append("REPETICIÓN: " + " | ".join(PASO_REPETICION.values()))
+        if aplica_clave(clave):
+            lineas.append(f"CONSEJO INMEDIATO {clave}: " + " | ".join(consejos))
+    if aplica_tipo("salud") or aplica_tipo("lesion"):
+        lineas.append("ESCALERA (síntomas no ETA): nivel 1 = consejo inmediato; nivel 2 = seguimiento con la persona "
+                      "(y SST si es dolor muscular o lesión); nivel 3 = sugerir cita con la EPS.")
+    if aplica_tipo("bpm"):
+        lineas.append("BPM: " + " | ".join(BPM_ESPECIFICO.values()))
+    repeticion = [texto for tipo, texto in PASO_REPETICION.items() if aplica_tipo(tipo)]
+    if repeticion:
+        lineas.append("REPETICIÓN: " + " | ".join(repeticion))
     return "\n".join(lineas)

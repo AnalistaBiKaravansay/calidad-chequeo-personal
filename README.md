@@ -8,68 +8,96 @@ Misma herramienta que `PROYECTO-CALIDAD` (reporte del día, tablero, datos, guí
 Forms → Power Automate → "Respuestas Forms (flujo).xlsx" en OneDrive
                                    │
                          PC puente (este equipo)
-         cada 15 min sube las respuestas nuevas · 11:00 reporte con IA
+   cada 30 min, de 5:00 a 12:00: sube lo nuevo y pide los consejos de IA de los casos nuevos
+                    11:00 (lun-sáb): reporte por correo
                                    │
                  Base de datos en la nube: Neon (PostgreSQL)
                                    │
           Página en la nube: Render (con clave compartida)  ←  Calidad
 ```
 
-- **El PC puente lee el Excel** del flujo, como la versión local, y **escribe en la base de la nube**. Solo sube respuestas nuevas o modificadas.
-- **La página en Render solo lee la base** y guarda los consejos de IA y las marcas 👍/👎. No lee Excel ni envía correos.
-- **Si el PC puente está apagado**, la página sigue funcionando con los datos que ya subió, pero no entran respuestas nuevas hasta que se encienda.
-- **Cuando TI habilite Microsoft Graph**, la página podrá leer el Excel directamente y el PC puente dejará de ser necesario.
+- **El PC puente lee el Excel** del flujo y **escribe en la base de la nube**. Solo sube respuestas nuevas o modificadas.
+- **Consejos de IA automáticos:** si en una pasada llegaron respuestas nuevas, el puente pide en ese momento los consejos para los casos nuevos (sin botón). En la página, **Pedir consejos a la IA** queda solo como respaldo si una consulta falló.
+- **La página en Render solo lee la base** y guarda las marcas 👍/👎. No lee Excel ni envía correos.
+- **Si el PC puente está apagado**, la página sigue funcionando con lo que ya subió, pero no entran respuestas nuevas, no se piden consejos automáticos y no sale el correo de las 11:00 hasta que se encienda. Respuestas que lleguen después de las 12:00 se suben al día siguiente a las 5:00 (o al pulsar Recargar en la versión del PC).
+- **Para no depender del PC:** que TI habilite Microsoft Graph (la página leería el Excel directamente) o dejar el puente en un equipo que siempre esté encendido con OneDrive sincronizando.
 
 > **Antes de compartir el enlace:** la página guarda datos de salud del personal (datos sensibles, Ley 1581) en servidores de Neon y Render fuera de Colombia. Se necesita la autorización de la empresa.
 
+## Ahorro de espacio, consultas y uso de IA
+
+El plan gratuito de Neon limita el espacio (unos 500 MB) y las horas que la base pasa despierta. Por eso:
+
+| Qué | Cómo |
+|---|---|
+| **Espacio** | La fila completa del Excel se guarda como lista de valores; los nombres de las 33 columnas, una sola vez (tabla `columnas`). La base pasó de 35 MB a 18 MB. |
+| **Horas de Neon** | El puente revisa en el PC si el Excel cambió (tamaño y fecha, guardados en `firmas.json`). Si no cambió, **no se conecta**, y la base sigue dormida. |
+| **Consultas de la página** | La página guarda en memoria las respuestas (sin la fila completa) y solo las vuelve a pedir cuando cambian los datos. Cada página hace unas pocas consultas pequeñas. La fila completa del Excel se pide solo en Datos con "Todas las columnas", y solo de la página que se ve. |
+| **Velocidad** | Render y Neon en la misma zona (AWS US East / Virginia). Páginas comprimidas (gzip); el estilo y el logo quedan guardados en el navegador. |
+| **IA** | Cada caso se identifica por su contenido: si llegan casos nuevos, **solo esos** se envían; los ya respondidos se conservan. De la guía solo va la parte que aplica a esos casos. Nunca se envían nombres. |
+
 ## Puesta en marcha
 
-### 1. Base de datos (Neon)
-1. Crear una cuenta gratuita en <https://neon.com> y un proyecto (región sugerida: la más cercana, por ejemplo AWS US East).
-2. Copiar la **cadena de conexión** (empieza por `postgresql://`). **No pegarla en ningún chat.**
-3. En este PC, desde esta carpeta:
-   ```
-   .venv\Scripts\python.exe -m calidad clave-bd
-   .venv\Scripts\python.exe -m calidad probar-bd
-   .venv\Scripts\python.exe -m calidad subir
-   ```
-   `subir` copia a la nube todo lo de la versión local (respuestas, consejos de IA y marcas). Se puede repetir sin duplicar.
+### 1. Base de datos (Neon) — hecho
+```
+.venv\Scripts\python.exe -m calidad clave-bd      (guarda la dirección de Neon sin mostrarla)
+.venv\Scripts\python.exe -m calidad probar-bd
+.venv\Scripts\python.exe -m calidad subir         (copia la versión local; se puede repetir sin duplicar)
+```
 
-### 2. Código en GitHub
-Render publica desde un repositorio de GitHub. Crear una cuenta en <https://github.com> y un repositorio **privado**, y subir esta carpeta. El `.gitignore` deja por fuera los Excel, las bases y las claves.
+### 2. Código en GitHub — hecho
+Repositorio **privado** `AnalistaBiKaravansay/calidad-chequeo-personal`. El `.gitignore` deja por fuera los Excel, las bases y las claves.
 
 ### 3. Página (Render)
-1. Crear una cuenta gratuita en <https://render.com> y conectar GitHub.
-2. **New → Blueprint** → elegir el repositorio. Render lee `render.yaml`.
+1. Crear una cuenta gratuita en <https://render.com> con **Sign in with GitHub**.
+2. **New → Blueprint** → elegir el repositorio. Render lee `render.yaml` (región Virginia, plan gratuito).
 3. Escribir los tres valores secretos:
-   - `DATABASE_URL`: la cadena de conexión de Neon.
-   - `GEMINI_API_KEY`: la clave de Gemini.
+   - `DATABASE_URL`: la cadena de conexión de Neon (está en `%USERPROFILE%\CalidadKaravansayNube\bd_nube.txt`).
+   - `GEMINI_API_KEY`: la clave de Gemini (`clave_gemini.txt` en la misma carpeta).
    - `CALIDAD_CLAVE`: la clave compartida para entrar a la página.
 4. Al terminar, Render da el enlace (`https://….onrender.com`).
 
-En el plan gratuito, Render apaga la página tras 15 minutos sin uso; la primera visita después tarda cerca de un minuto en abrir.
+En el plan gratuito, Render apaga la página tras 15 minutos sin uso; la primera visita después tarda cerca de un minuto en abrir. No se pierde nada: los datos están en Neon.
 
 ### 4. PC puente
 Abrir **Configuracion\PROGRAMAR_ENVIO_DIARIO.cmd** y pulsar Enter (11:00). Crea dos tareas de Windows:
-- **Calidad NUBE - subir datos:** cada 15 minutos, de 5:00 a 20:00.
-- **Calidad NUBE - reporte diario:** de lunes a sábado a las 11:00 (una sola consulta a la IA).
+- **Calidad NUBE - subir datos:** cada 30 minutos, de 5:00 a 12:00. Sube lo nuevo y pide los consejos de IA de los casos nuevos.
+- **Calidad NUBE - reporte diario:** de lunes a sábado a las 11:00. Envía el correo con los consejos ya guardados.
 
 El detalle de cada ejecución queda en `%USERPROFILE%\CalidadKaravansayNube\registro.txt`.
 
+## Comandos
+| Comando | Qué hace |
+|---|---|
+| `python -m calidad sincronizar [--ia] [--todo]` | Sube lo nuevo. `--ia`: consejos para los casos nuevos de hoy. `--todo`: relee todo y recalcula novedades. |
+| `python -m calidad diario [--enviar]` | Reporte del día (y correo). |
+| `python -m calidad web [--abrir]` | Página en este PC (puerto 8766), con la misma base de la nube. |
+| `python -m calidad clave-bd` / `clave-ia` | Guarda la dirección de Neon / la clave de Gemini en este PC. |
+| `python -m calidad probar-bd` | Comprueba la conexión. |
+| `python -m calidad subir` | Copia la base de la versión local a la nube. |
+| `python -m calidad compactar` | Pasa respuestas en formato antiguo al compacto y libera el espacio. |
+
 ## Archivos y datos privados
-- Datos privados del PC puente: `%USERPROFILE%\CalidadKaravansayNube` (`bd_nube.txt`, `clave_gemini.txt`, reportes). No están en la carpeta de red ni en GitHub.
+- Datos privados del PC puente: `%USERPROFILE%\CalidadKaravansayNube` (`bd_nube.txt`, `clave_gemini.txt`, `firmas.json`, reportes, `registro.txt`). No están en la carpeta de red ni en GitHub.
 - **ABRIR_TABLERO.cmd** abre esta versión en el PC (puerto 8766), conectada a la misma base de la nube.
 - La versión local (`PROYECTO-CALIDAD`, puerto 8765) sigue funcionando sola y no se modifica.
 
 ## Para el desarrollador
 ```
+Configuracion\INSTALAR.cmd                       (instala requirements-dev.txt: lo del servidor + pytest)
 .venv\Scripts\python.exe -m pytest -q tests
 ```
+`requirements.txt` es solo lo que necesita el servidor (Render); `requirements-dev.txt` agrega las pruebas.
+
 | Archivo | Qué hace |
 |---|---|
 | `calidad/bd.py` | Conexión: PostgreSQL si hay `DATABASE_URL` o `bd_nube.txt`; si no, SQLite local |
-| `calidad/datos.py` | Lee los Excel, sube solo lo nuevo o cambiado, y `subir()` copia la base anterior |
-| `calidad/web.py` | Página; inicio de sesión con `CALIDAD_CLAVE`; modo nube con `CALIDAD_NUBE=1` |
+| `calidad/datos.py` | Lee los Excel, sube solo lo nuevo, formato compacto, firmas locales y memoria de respuestas (`registros`) |
+| `calidad/analisis.py` | Novedades del día, historial, alertas y tablero, calculados sobre la memoria |
+| `calidad/ia.py` | Consejos de Gemini por caso (solo los casos nuevos), marcas 👍/👎 |
+| `calidad/guia.py` | Pasos de la guía; `texto_para_ia()` envía solo la parte que aplica |
+| `calidad/web.py` | Página; inicio de sesión con `CALIDAD_CLAVE`; modo nube con `CALIDAD_NUBE=1`; gzip y caché |
+| `calidad/templates`, `calidad/static` | Diseño con la paleta de Karavansay (igual que Capacitaciones) y el logo |
 | `render.yaml` | Configuración de Render |
 
-El resto (reglas, guía, análisis, IA) es igual a la versión local; ver el README de `PROYECTO-CALIDAD`.
+Las reglas de detección (`reglas.py`) y la guía son las mismas de la versión local; ver el README de `PROYECTO-CALIDAD`.

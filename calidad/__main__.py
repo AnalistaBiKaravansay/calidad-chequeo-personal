@@ -6,6 +6,7 @@
   python -m calidad clave-bd           guarda la dirección de la base en la nube (Neon) en este equipo
   python -m calidad probar-bd          comprueba la conexión con la base
   python -m calidad subir [--desde RUTA]   copia la base local de la versión anterior a la nube
+  python -m calidad compactar          pasa las respuestas guardadas al formato que ocupa menos espacio
 """
 import argparse
 import getpass
@@ -16,7 +17,9 @@ import webbrowser
 from contextlib import closing
 from pathlib import Path
 
-from . import config, datos, diario
+from datetime import datetime
+
+from . import config, datos, diario, reporte
 
 BASE_ANTERIOR = Path.home() / "CalidadKaravansay" / "calidad.db"
 
@@ -35,22 +38,34 @@ def main():
     w.add_argument("--abrir", action="store_true")
     s = sub.add_parser("sincronizar", help="Lee los Excel configurados.")
     s.add_argument("--todo", action="store_true", help="Releer todo y recalcular novedades.")
+    s.add_argument("--ia", action="store_true",
+                   help="Si llegaron respuestas nuevas de hoy, pedir a la IA consejos para los casos nuevos.")
     sub.add_parser("clave-ia", help="Guarda la clave de Gemini en este equipo.")
     sub.add_parser("clave-bd", help="Guarda la dirección de la base en la nube en este equipo.")
     sub.add_parser("probar-bd", help="Comprueba la conexión con la base.")
     u = sub.add_parser("subir", help="Copia la base local de la versión anterior a la base configurada.")
     u.add_argument("--desde", default=str(BASE_ANTERIOR))
+    sub.add_parser("compactar", help="Pasa las respuestas guardadas al formato compacto y libera el espacio.")
     a = p.parse_args()
 
     if a.orden == "diario":
         diario.ejecutar(a.fecha, a.enviar or a.prueba, a.forzar, a.prueba)
     elif a.orden == "sincronizar":
+        if not a.todo and not datos.hay_cambios():
+            # Sin conectarse: así la base en la nube sigue dormida y no gasta horas del plan gratuito.
+            print("Los Excel no han cambiado desde la última subida. No se conectó a la base.")
+            return
         with closing(datos.conectar()) as con:
-            for f in datos.sincronizar(con, forzar=a.todo):
+            estado = datos.sincronizar(con, forzar=a.todo)
+            for f in estado:
                 print(f)
             if a.todo:
                 datos.recalcular(con)
             print("Respuestas en la base:", con.execute("SELECT count(*) FROM respuestas").fetchone()[0])
+            if a.ia and any(f.get("guardadas") for f in estado):
+                # Consulta automática: solo se envían a la IA los casos que todavía no tienen consejo.
+                hoy = datetime.now().strftime("%Y-%m-%d")
+                print("IA:", reporte.construir(con, hoy)["ia"]["estado"])
     elif a.orden == "clave-ia":
         clave = getpass.getpass("Pegue la clave de Gemini (no se mostrará): ").strip()
         archivo = config.carpeta_datos() / "clave_gemini.txt"
@@ -80,6 +95,16 @@ def main():
             for tabla, n in datos.subir(a.desde, con).items():
                 print(f"- {tabla}: {n} filas")
             print("Listo. Respuestas en la nube:", con.execute("SELECT count(*) FROM respuestas").fetchone()[0])
+    elif a.orden == "compactar":
+        with closing(datos.conectar()) as con:
+            print("Respuestas pasadas al formato compacto:", datos.compactar(con))
+            if con.postgres:
+                # VACUUM FULL reescribe la tabla y devuelve el espacio liberado (no puede ir en una transacción).
+                con.cruda.autocommit = True
+                for tabla in ("respuestas", "ia"):
+                    con.execute(f"VACUUM FULL {tabla}")
+                tamano = con.execute("SELECT pg_size_pretty(pg_database_size(current_database()))").fetchone()[0]
+                print("Tamaño de la base ahora:", tamano)
     elif a.orden == "web":
         url = f"http://127.0.0.1:{a.puerto}"
         if _responde(url):

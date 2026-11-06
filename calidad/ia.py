@@ -8,6 +8,9 @@
   pasos de la guía que el reporte ya muestra para que no los repita.
 - "Entrenamiento": Calidad marca cada consejo (👍/👎 o corrección) y las marcas recientes van como ejemplos
   en la consulta diaria (sin nombres), sin consultas extra.
+- Ahorro: cada caso se identifica por su contenido. Si llegan casos nuevos durante el día, solo esos se
+  consultan; los ya respondidos se conservan. De la guía solo van las partes que aplican a esos casos, y el JSON
+  va sin espacios.
 """
 import hashlib
 import json
@@ -158,10 +161,16 @@ def resumen_aprendizaje(con):
             "ultimas": [dict(x) for x in ultimas]}
 
 
-def consultar(entrada, clave, modelo, timeout=60, aprendizajes=""):
-    texto = (INSTRUCCIONES + "\nGUÍA:\n" + guia.texto_para_ia()
+def _json(valor):
+    return json.dumps(valor, ensure_ascii=False, separators=(",", ":"))
+
+
+def consultar(entrada, clave, modelo, timeout=60, aprendizajes="", tipos=None, claves=None, ya_revisados=None):
+    texto = (INSTRUCCIONES + "\nGUÍA:\n" + guia.texto_para_ia(tipos, claves)
              + ("\n\n" + aprendizajes if aprendizajes else "")
-             + "\n\nCASOS DEL DÍA:\n" + json.dumps(entrada, ensure_ascii=False))
+             + ("\n\nCASOS YA REVISADOS HOY (solo para el resumen_dia; no los incluyas en \"casos\"):\n"
+                + _json(ya_revisados) if ya_revisados else "")
+             + "\n\nCASOS DEL DÍA:\n" + _json(entrada))
     r = httpx.post(URL.format(modelo=modelo), headers={"x-goog-api-key": clave}, timeout=timeout, json={
         "contents": [{"role": "user", "parts": [{"text": texto}]}],
         "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json"},
@@ -185,36 +194,80 @@ def validar(datos, entrada):
     return {"resumen_dia": str(datos.get("resumen_dia") or ""), "casos": casos}
 
 
+def _firma_caso(caso):
+    """Identifica un caso por su contenido (sin el código C1, C2..., que cambia si llegan casos nuevos)."""
+    sin_codigo = {k: v for k, v in caso.items() if k != "codigo"}
+    return hashlib.sha256(json.dumps(sin_codigo, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16]
+
+
+def _guardadas(guardada, entrada, firmas):
+    """(respuestas guardadas por firma de caso, resumen) a partir de la fila de la tabla ia."""
+    if not guardada:
+        return {}, ""
+    datos_ia = json.loads(guardada["respuesta"])
+    if datos_ia.get("formato") == 2:
+        return datos_ia["casos"], datos_ia.get("resumen_dia", "")
+    # Formato anterior (por código): sirve solo si los casos del día no cambiaron.
+    firma_antigua = hashlib.sha256(json.dumps(entrada, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    if guardada["entrada"] != firma_antigua:
+        return {}, ""
+    return ({firmas[c]: v for c, v in datos_ia.get("casos", {}).items() if c in firmas},
+            datos_ia.get("resumen_dia", ""))
+
+
 def consejos_del_dia(con, dia, casos, cfg=None, consultar_ia=True):
-    """Devuelve {'estado', 'resumen_dia', 'casos'}. Reutiliza la respuesta guardada si los casos no cambiaron."""
+    """Devuelve {'estado', 'resumen_dia', 'casos'}. Reutiliza lo guardado y solo consulta los casos nuevos."""
     cfg = cfg or config.cargar()
     entrada = preparar(casos)
     if not entrada:
         return {"estado": "sin casos", "resumen_dia": "", "casos": {}}
-    firma = hashlib.sha256(json.dumps(entrada, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    firmas = {c["codigo"]: _firma_caso(c) for c in entrada}
     guardada = con.execute("SELECT entrada, respuesta, modelo FROM ia WHERE dia=?", (dia,)).fetchone()
-    if guardada and guardada["entrada"] == firma:
-        return {"estado": "ok", "modelo": guardada["modelo"], **json.loads(guardada["respuesta"])}
+    previas, resumen = _guardadas(guardada, entrada, firmas)
+    por_codigo = lambda: {c: previas[f] for c, f in firmas.items() if f in previas}
+    faltan = [c for c in entrada if firmas[c["codigo"]] not in previas]
+    if not faltan:
+        return {"estado": "ok", "modelo": guardada["modelo"], "resumen_dia": resumen, "casos": por_codigo()}
     if not consultar_ia:
-        return {"estado": "pendiente", "resumen_dia": "", "casos": {}}
+        return {"estado": "pendiente", "resumen_dia": resumen, "casos": por_codigo()}
     clave = config.clave_ia(cfg)
     if not clave:
-        return {"estado": "sin clave", "resumen_dia": "", "casos": {}}
+        return {"estado": "sin clave", "resumen_dia": resumen, "casos": por_codigo()}
+    # Tipos y claves de los casos que se consultan, para enviar solo esa parte de la guía.
+    codigos = {c["codigo"] for c in faltan}
+    tipos, claves = set(), set()
+    for caso in casos:
+        if caso.get("codigo") in codigos:
+            for i in caso["items"]:
+                if i["tipo"] not in ("dotacion", "epp"):
+                    tipos.add(i["tipo"])
+                    claves.add(i["clave"])
+                    if i["etiqueta"].startswith("Mencionado"):
+                        claves.add("mencion")
+    ya_revisados = [{"codigo": c["codigo"], "lugar": c["lugar"], "novedades": [n["novedad"] for n in c["novedades"]]}
+                    for c in entrada if c["codigo"] not in codigos]
     errores = []
     aprendizajes = ejemplos(con)
     # Del mejor al más básico: si uno está saturado, sin cuota o no responde, se pasa al siguiente.
     for modelo in cfg["ia_modelos"]:
         try:
-            respuesta = consultar(entrada, clave, modelo, aprendizajes=aprendizajes)
+            respuesta = consultar(faltan, clave, modelo, aprendizajes=aprendizajes, tipos=tipos, claves=claves,
+                                  ya_revisados=ya_revisados)
         except (httpx.HTTPError, RuntimeError, ValueError, KeyError, IndexError) as e:
             errores.append(f"{modelo}: {str(e)[:80]}")
             continue
+        vigentes = set(firmas.values())
+        previas = {f: v for f, v in previas.items() if f in vigentes}   # se olvidan los casos que ya no están
+        for c in faltan:
+            previas[firmas[c["codigo"]]] = respuesta["casos"].get(c["codigo"], {"consejos": [], "atencion": ""})
+        resumen = respuesta["resumen_dia"] or resumen
+        firma_dia = hashlib.sha256("|".join(sorted(vigentes)).encode()).hexdigest()[:16]
         with con:
             con.execute("INSERT INTO ia(dia, entrada, respuesta, modelo, creado) VALUES (?,?,?,?,?) "
                         "ON CONFLICT(dia) DO UPDATE SET entrada=excluded.entrada, respuesta=excluded.respuesta, "
                         "modelo=excluded.modelo, creado=excluded.creado",
-                        (dia, firma, json.dumps(respuesta, ensure_ascii=False), modelo,
+                        (dia, firma_dia, _json({"formato": 2, "resumen_dia": resumen, "casos": previas}), modelo,
                          datetime.now().isoformat(timespec="seconds")))
-        return {"estado": "ok", "modelo": modelo, **respuesta}
+        return {"estado": "ok", "modelo": modelo, "resumen_dia": resumen, "casos": por_codigo()}
     return {"estado": "no disponible: ningún modelo respondió (" + " | ".join(errores) + ")",
-            "resumen_dia": "", "casos": {}}
+            "resumen_dia": resumen, "casos": por_codigo()}

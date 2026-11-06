@@ -9,8 +9,9 @@ from . import analisis, config, guia, ia
 DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
          "noviembre", "diciembre"]
-COLORES = {"eta": "#c62828", "salud": "#ef6c00", "lesion": "#ef6c00", "revisar": "#6b5b95", "bpm": "#b58900",
-           "dotacion": "#546e7a", "epp": "#546e7a"}
+# Colores de cada tipo de novedad (paleta de la marca; texto blanco encima con contraste AA).
+COLORES = {"eta": "#a43a28", "salud": "#b45309", "lesion": "#b45309", "revisar": "#6b5b95", "bpm": "#7a6200",
+           "dotacion": "#57534a", "epp": "#57534a"}
 NOMBRE_TIPO = {"eta": "Alerta ETA", "salud": "Salud", "lesion": "Lesión", "revisar": "Revisar", "bpm": "BPM",
                "dotacion": "Dotación", "epp": "EPP"}
 
@@ -27,7 +28,7 @@ def veces(n):
 plantillas = Environment(loader=PackageLoader("calidad", "templates"), autoescape=select_autoescape())
 plantillas.globals.update(COLORES=COLORES, NOMBRE_TIPO=NOMBRE_TIPO, ETA=guia.ETA, ACCION_ETA=guia.ACCION_ETA,
                           REINTEGRO_ETA=guia.REINTEGRO_ETA, AVISO=guia.AVISO, FUENTES=guia.FUENTES,
-                          NIVELES=guia.NIVELES, COLOR_NIVEL={1: "#2e7d32", 2: "#b58900", 3: "#c62828"})
+                          NIVELES=guia.NIVELES, COLOR_NIVEL={1: "#2c6a45", 2: "#7a6200", 3: "#a43a28"})
 plantillas.filters.update(fecha_larga=fecha_larga, veces=veces)
 
 

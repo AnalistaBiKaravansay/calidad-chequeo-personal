@@ -1,7 +1,9 @@
 {% extends "base.html" %}
+{% block titulo %}Datos{% endblock %}
 {% block contenido %}
-<h1>Datos</h1>
-<form method="get" class="filtros">
+<div class="encabezado"><h1>Datos</h1>
+  <a class="boton" href="/datos.csv?{{ consulta }}">⭳ Descargar para Excel</a></div>
+<section><form method="get" class="filtros">
   <label>Desde <input type="date" name="desde" value="{{ desde }}"></label>
   <label>Hasta <input type="date" name="hasta" value="{{ hasta }}"></label>
   <label>Lugar
@@ -18,14 +20,13 @@
   </label>
   <label>Observación contiene <input type="search" name="texto" value="{{ texto }}" placeholder="Ej.: botas"></label>
   <label class="check"><input type="checkbox" name="completa" value="1" {{ 'checked' if completa }}> Todas las columnas del formulario</label>
-  <button>Filtrar</button>
-  <a class="boton" href="/datos">Quitar filtros</a>
-  <a class="boton" href="/datos.csv?{{ consulta }}">Descargar para Excel</a>
-</form>
+  <button class="principal">Filtrar</button>
+  <a class="boton discreto" href="/datos">Quitar filtros</a>
+</form></section>
 
 <p class="nota">{{ total }} respuesta(s) del {{ desde }} al {{ hasta }}{% if total > registros|length %}, se muestran {{ registros|length }} por página{% endif %}. La descarga incluye todas las filas filtradas.</p>
 
-<div class="tabla"><table class="datos">
+<section style="padding:0;overflow:hidden"><div class="tabla"><table class="datos">
   <tr>
     <th>Id</th><th>Fecha</th><th>Persona</th><th>Lugar</th><th>Revisó</th><th>Novedades</th><th>Observación</th>
     {% for col in columnas %}<th>{{ col }}</th>{% endfor %}
@@ -44,7 +45,7 @@
   {% else %}
   <tr><td colspan="7">No hay respuestas con estos filtros.</td></tr>
   {% endfor %}
-</table></div>
+</table></div></section>
 
 {% if paginas > 1 %}
 <div class="barra" style="margin-top:12px">

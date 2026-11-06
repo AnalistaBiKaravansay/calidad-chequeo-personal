@@ -5,8 +5,10 @@ services:
     name: calidad-chequeo-personal
     runtime: python
     plan: free
+    region: virginia             # la misma zona que la base en Neon (AWS US East): consultas más rápidas
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn calidad.web:app --host 0.0.0.0 --port $PORT
+    # Sin pytest en el servidor: instala menos y arranca antes. --proxy-headers: Render atiende por https.
+    startCommand: uvicorn calidad.web:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
     healthCheckPath: /salud
     envVars:
       - key: PYTHON_VERSION

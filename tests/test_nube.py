@@ -102,6 +102,88 @@ def test_subir_copia_la_base_anterior_sin_duplicar(carpeta, tmp_path):
     assert con.execute("SELECT count(*) FROM valoraciones").fetchone()[0] == 1
 
 
+def test_fila_completa_se_guarda_compacta_y_se_lee_igual(carpeta):
+    con = datos.conectar()
+    original = fila(5, obs="Gripa")
+    datos.guardar(con, original)
+    texto = con.execute("SELECT crudo FROM respuestas WHERE id=5").fetchone()[0]
+    assert "OBSERVACIONES" not in texto            # los nombres de columna no se repiten en cada fila
+    assert datos.crudos(con, [5])[5]["OBSERVACIONES"] == "Gripa"
+    assert datos.crudos(con, [5])[5]["Hora de finalización"] == "2026-10-20 08:00:00"
+
+
+def test_compactar_pasa_el_formato_antiguo(carpeta):
+    import json
+    con = datos.conectar()
+    viejo = {"Id": 9, "NOMBRE1": "Ana", "OBSERVACIONES": "Gripa"}
+    con.execute("INSERT INTO respuestas VALUES (9,'2026-10-20 08:00:00','2026-10-20','Ana','ana','PLANTA 1','R',"
+                "'Gripa',?,?)", (json.dumps([{"tipo": "salud", "clave": "respiratorio"}]), json.dumps(viejo)))
+    con.commit()
+    assert datos.compactar(con) == 1 and datos.compactar(con) == 0
+    texto, novedades = con.execute("SELECT crudo, novedades FROM respuestas WHERE id=9").fetchone()
+    assert texto.startswith("[") and '": ' not in novedades
+    assert datos.crudos(con, [9])[9] == viejo
+
+
+def test_puente_no_se_conecta_si_el_excel_no_cambio(carpeta):
+    excel = carpeta / "flujo.xlsx"
+    cfg = {**config.cargar(), "excel_flujo": str(excel)}
+    _excel(excel, [fila(1)])
+    assert datos.hay_cambios(cfg)
+    con = datos.conectar(cfg)
+    datos.sincronizar(con, cfg)
+    assert not datos.hay_cambios(cfg)
+    _excel(excel, [fila(1), fila(2, nombre="Nueva")])
+    import os
+    os.utime(excel, (excel.stat().st_atime, excel.stat().st_mtime + 5))
+    assert datos.hay_cambios(cfg)
+
+
+def test_ia_solo_consulta_los_casos_nuevos(carpeta, monkeypatch):
+    import json
+    import httpx
+    from calidad import analisis, ia
+    from test_calidad import CFG
+    con = datos.conectar()
+    datos.guardar(con, fila(1, nombre="Ana Uno", obs="Congestión"))
+    enviados = []
+
+    def falso_post(url, json=None, **kw):
+        texto = json["contents"][0]["parts"][0]["text"]
+        casos = __import__("json").loads(texto.split("CASOS DEL DÍA:\n")[1])
+        enviados.append(texto)
+        respuesta = {"resumen_dia": "r", "casos": [{"codigo": c["codigo"], "consejos": [f"consejo {c['codigo']}"]}
+                                                   for c in casos]}
+        return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": __import__("json").dumps(respuesta)}]}}]})
+
+    monkeypatch.setattr("calidad.config.clave_ia", lambda cfg=None: "clave")
+    monkeypatch.setattr(ia.httpx, "post", falso_post)
+    _, casos = analisis.novedades_del_dia(con, "2026-10-20")
+    ia.consejos_del_dia(con, "2026-10-20", casos, CFG)
+    # Llega un caso nuevo que se ordena antes (los códigos C1, C2 cambian).
+    datos.guardar(con, fila(2, nombre="Aaron Dos", **{SALUD["diarrea"]: "SI"}))
+    _, casos = analisis.novedades_del_dia(con, "2026-10-20")
+    r = ia.consejos_del_dia(con, "2026-10-20", casos, CFG)
+    assert len(enviados) == 2
+    segundo = enviados[1].split("CASOS DEL DÍA:\n")[1]
+    assert len(json.loads(segundo)) == 1 and "Diarrea" in segundo        # solo el caso nuevo
+    assert "CASOS YA REVISADOS HOY" in enviados[1]
+    assert "CONSEJO INMEDIATO respiratorio" not in enviados[1]            # la guía solo trae lo que aplica
+    ana = next(c["codigo"] for c in casos if c["nombre"] == "Ana Uno")
+    assert r["casos"][ana]["consejos"] == ["consejo C1"]                   # se conservó lo de la primera consulta
+    # Sin cambios: no se vuelve a consultar.
+    ia.consejos_del_dia(con, "2026-10-20", casos, CFG)
+    assert len(enviados) == 2
+
+
+def test_paginas_comprimidas_y_estilos_en_cache(carpeta, monkeypatch):
+    c = cliente(monkeypatch)
+    r = c.get("/guia", headers={"Accept-Encoding": "gzip"})
+    assert r.headers.get("content-encoding") == "gzip" and "no-store" in r.headers["cache-control"]
+    assert "logo.svg" in r.text
+    assert "immutable" in c.get("/static/estilo.css").headers["cache-control"]
+
+
 def test_ruta_de_windows_se_respeta_en_el_servidor():
     # Debe quedar igual a la que guardó el PC puente, también cuando la página corre en Linux.
     assert str(config.ruta_excel("C:\\Users\\x\\flujo.xlsx")) == "C:\\Users\\x\\flujo.xlsx"
