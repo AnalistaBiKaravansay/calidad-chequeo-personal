@@ -1,0 +1,21 @@
+# Configuración para Render (plan gratuito). Render la lee al crear el servicio desde el repositorio.
+# Los valores secretos (sync: false) se escriben a mano en Render, nunca aquí.
+services:
+  - type: web
+    name: calidad-chequeo-personal
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn calidad.web:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /salud
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.8"
+      - key: CALIDAD_NUBE
+        value: "1"
+      - key: DATABASE_URL        # dirección de conexión de Neon
+        sync: false
+      - key: GEMINI_API_KEY      # clave de Gemini
+        sync: false
+      - key: CALIDAD_CLAVE       # clave compartida para entrar a la página
+        sync: false

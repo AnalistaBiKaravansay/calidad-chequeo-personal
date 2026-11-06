@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block contenido %}
+<h1>Datos</h1>
+<form method="get" class="filtros">
+  <label>Desde <input type="date" name="desde" value="{{ desde }}"></label>
+  <label>Hasta <input type="date" name="hasta" value="{{ hasta }}"></label>
+  <label>Lugar
+    <select name="lugar"><option value="">Todos</option>
+      {% for l in lugares %}<option {{ 'selected' if l == lugar }}>{{ l }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Persona
+    <input type="search" name="persona" list="personas-datos" value="{{ persona_texto }}" placeholder="Todas">
+    <datalist id="personas-datos">{% for p in personas %}<option value="{{ p }}">{% endfor %}</datalist>
+  </label>
+  <label>Mostrar
+    <select name="tipo">{% for v, t in tipos %}<option value="{{ v }}" {{ 'selected' if v == tipo }}>{{ t }}</option>{% endfor %}</select>
+  </label>
+  <label>Observación contiene <input type="search" name="texto" value="{{ texto }}" placeholder="Ej.: botas"></label>
+  <label class="check"><input type="checkbox" name="completa" value="1" {{ 'checked' if completa }}> Todas las columnas del formulario</label>
+  <button>Filtrar</button>
+  <a class="boton" href="/datos">Quitar filtros</a>
+  <a class="boton" href="/datos.csv?{{ consulta }}">Descargar para Excel</a>
+</form>
+
+<p class="nota">{{ total }} respuesta(s) del {{ desde }} al {{ hasta }}{% if total > registros|length %}, se muestran {{ registros|length }} por página{% endif %}. La descarga incluye todas las filas filtradas.</p>
+
+<div class="tabla"><table class="datos">
+  <tr>
+    <th>Id</th><th>Fecha</th><th>Persona</th><th>Lugar</th><th>Revisó</th><th>Novedades</th><th>Observación</th>
+    {% for col in columnas %}<th>{{ col }}</th>{% endfor %}
+  </tr>
+  {% for r in registros %}
+  <tr>
+    <td>{{ r.id }}</td>
+    <td class="sin-salto"><a href="/?dia={{ r.dia }}">{{ r.fecha[:16] }}</a></td>
+    <td><a href="/persona/{{ r.persona|urlencode }}">{{ r.nombre }}</a></td>
+    <td class="sin-salto">{{ r.lugar }}</td>
+    <td>{{ r.responsable }}</td>
+    <td>{% for n in r.novedades %}<span class="etiqueta" style="background:{{ COLORES[n.tipo] }}">{{ NOMBRE_TIPO[n.tipo] }}</span> {{ n.etiqueta }}<br>{% endfor %}</td>
+    <td>{{ r.observacion }}</td>
+    {% for col in columnas %}<td>{{ r.crudo.get(col) if r.crudo.get(col) is not none else '' }}</td>{% endfor %}
+  </tr>
+  {% else %}
+  <tr><td colspan="7">No hay respuestas con estos filtros.</td></tr>
+  {% endfor %}
+</table></div>
+
+{% if paginas > 1 %}
+<div class="barra" style="margin-top:12px">
+  {% if pagina_num > 1 %}<a class="boton" href="/datos?{{ consulta }}&pagina_num={{ pagina_num - 1 }}">← Anterior</a>{% endif %}
+  <span>Página {{ pagina_num }} de {{ paginas }}</span>
+  {% if pagina_num < paginas %}<a class="boton" href="/datos?{{ consulta }}&pagina_num={{ pagina_num + 1 }}">Siguiente →</a>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

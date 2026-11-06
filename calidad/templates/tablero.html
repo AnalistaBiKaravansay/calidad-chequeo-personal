@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% macro barra(valor, maximo, color) %}<span class="barra-fondo"><span class="barra-valor" style="width:{{ (100 * valor / maximo)|round(1) if maximo else 0 }}%;background:{{ color }}"></span></span>{% endmacro %}
+{% block contenido %}
+<div class="barra">
+  <h1>Tablero histórico</h1>
+  <span class="espacio"></span>
+  <form method="get" class="barra">
+    <select name="lugar" onchange="this.form.submit()">
+      <option value="">Todos los lugares</option>
+      {% for l in lista_lugares %}<option {{ 'selected' if l == lugar }}>{{ l }}</option>{% endfor %}
+    </select>
+    <input type="search" name="persona" list="personas" value="{{ persona }}" placeholder="Buscar persona…"
+           onchange="this.form.submit()" style="min-width:220px">
+    <datalist id="personas">{% for p in lista_personas %}<option value="{{ p }}">{% endfor %}</datalist>
+    <button>Filtrar</button>
+    {% if lugar or persona %}<a class="boton" href="/tablero">Quitar filtros</a>{% endif %}
+  </form>
+</div>
+<p class="nota">Datos hasta el {{ hasta }}. “Salud” cuenta alertas ETA y otros síntomas; cada chequeo cuenta una vez por tipo.</p>
+{% if persona %}
+<p class="mensaje">
+  {% if por_mes %}Mostrando solo a <b>{{ persona }}</b>{% if lugar %} en {{ lugar }}{% endif %}.
+  Ver su <a href="/persona/{{ persona_clave|urlencode }}">historial completo</a>.
+  {% else %}No hay chequeos de <b>{{ persona }}</b>{% if lugar %} en {{ lugar }}{% endif %}. Revise cómo está escrito el nombre.{% endif %}
+</p>
+{% endif %}
+
+<section>
+  <h2>Síntomas por semana (últimas 12 semanas)</h2>
+  <p class="nota">Sirve para ver si algo está pasando: un salto en una columna frente a las semanas anteriores merece revisión.</p>
+  {% set maximo = semanas|map(attribute='respuestas')|max if semanas else 0 %}
+  <div class="tabla"><table>
+    <tr><th>Semana del</th><th>Chequeos</th>{% for g in grupos %}<th>{{ g|capitalize }}</th>{% endfor %}</tr>
+    {% for s in semanas %}
+    <tr><td>{{ s.semana }}</td><td>{{ s.respuestas }}</td>
+      {% for g in grupos %}{% set v = s[g] or 0 %}<td class="{{ 'alto' if v >= 5 }}">{{ v }} {{ barra(v, 15, '#ef6c00') }}</td>{% endfor %}
+    </tr>
+    {% endfor %}
+  </table></div>
+</section>
+
+<div class="columnas">
+  <section>
+    <h2>Síntomas más reportados (90 días)</h2>
+    {% set m = sintomas[0][1] if sintomas else 0 %}
+    <table>{% for e, n in sintomas %}<tr><td>{{ e }}</td><td class="num">{{ n }}</td><td class="ancho">{{ barra(n, m, '#c62828') }}</td></tr>{% else %}<tr><td>Sin síntomas reportados.</td></tr>{% endfor %}</table>
+  </section>
+  <section>
+    <h2>BPM, dotación y EPP (90 días)</h2>
+    {% set m = problemas[0][1] if problemas else 0 %}
+    <table>{% for e, n in problemas %}<tr><td>{{ e }}</td><td class="num">{{ n }}</td><td class="ancho">{{ barra(n, m, '#546e7a') }}</td></tr>{% endfor %}</table>
+  </section>
+</div>
+
+<section>
+  <h2>Personas con síntomas repetidos (30 días)</h2>
+  <div class="tabla"><table>
+    <tr><th>Persona</th><th>Días con síntomas</th><th>Último</th><th>Qué reportó</th></tr>
+    {% for p in recurrentes %}
+    <tr><td><a href="/persona/{{ p.persona|urlencode }}">{{ p.nombre }}</a></td><td class="{{ 'alto' if p.dias >= 3 }}">{{ p.dias }}</td><td>{{ p.ultimo }}</td><td>{{ p.sintomas }}</td></tr>
+    {% else %}<tr><td colspan="4">Nadie ha reportado síntomas más de una vez.</td></tr>{% endfor %}
+  </table></div>
+</section>
+
+<div class="columnas">
+  <section>
+    <h2>Por lugar (90 días)</h2>
+    <table><tr><th>Lugar</th><th>Chequeos</th><th>Con síntomas</th><th>%</th></tr>
+      {% for l in lugares %}<tr><td>{{ l.lugar }}</td><td>{{ l.respuestas }}</td><td>{{ l.salud }}</td><td>{{ (100 * l.salud / l.respuestas)|round(1) }}%</td></tr>{% endfor %}
+    </table>
+  </section>
+  <section>
+    <h2>Evolución mensual</h2>
+    <div class="tabla"><table><tr><th>Mes</th><th>Chequeos</th><th>ETA</th><th>Síntomas</th><th>BPM</th><th>Dotación</th><th>EPP</th></tr>
+      {% for m in por_mes %}<tr><td>{{ m.mes }}</td><td>{{ m.respuestas }}</td><td>{{ m.eta or 0 }}</td><td>{{ m.salud or 0 }}</td><td>{{ m.bpm or 0 }}</td><td>{{ m.dotacion or 0 }}</td><td>{{ m.epp or 0 }}</td></tr>{% endfor %}
+    </table></div>
+  </section>
+</div>
+{% endblock %}

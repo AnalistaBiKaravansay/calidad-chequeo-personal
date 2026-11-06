@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Calidad · Chequeo de personal</title>
+  <link rel="stylesheet" href="/static/estilo.css">
+</head>
+<body>
+  <header>
+    <strong>Calidad · Chequeo de personal</strong>
+    <nav>
+      <a href="/" class="{{ 'activo' if pagina == 'hoy.html' }}">Reporte del día</a>
+      <a href="/tablero" class="{{ 'activo' if pagina == 'tablero.html' }}">Tablero</a>
+      <a href="/datos" class="{{ 'activo' if pagina == 'datos.html' }}">Datos</a>
+      <a href="/guia" class="{{ 'activo' if pagina == 'guia.html' }}">Guía</a>
+    </nav>
+    <span class="espacio"></span>
+    <form method="post" action="/recargar">
+      <input type="hidden" name="volver" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+      <button class="recargar" title="{{ 'Ver cuándo subió datos el PC puente' if NUBE else 'Leer ahora las respuestas nuevas del Forms' }}">⟳ Recargar</button>
+    </form>
+    {% if request.cookies.get('calidad_sesion') %}<a class="salir" href="/salir">Salir</a>{% endif %}
+  </header>
+  <main>
+    {% if request.query_params.get('mensaje') %}<div class="mensaje">{{ request.query_params.get('mensaje') }}</div>{% endif %}
+    {% block contenido %}{% endblock %}
+  </main>
+</body>
+</html>

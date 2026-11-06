@@ -1,0 +1,141 @@
+{# Cuerpo del reporte diario. Estilos en línea y tablas para que se vea bien también en Outlook. #}
+{% set r = resumen %}
+<div style="font-family:Segoe UI,Arial,sans-serif;color:#1f2933;font-size:14px;line-height:1.45;max-width:860px">
+  <h1 style="font-size:22px;margin:0 0 4px">Chequeo diario de personal</h1>
+  <div style="color:#5f6b7a;margin-bottom:14px">{{ dia|fecha_larga|capitalize }} · generado {{ generado }}</div>
+
+  {% if aviso_fuente %}
+  <div style="background:#fff4e5;border:1px solid #f0b46a;padding:10px 12px;margin-bottom:14px;border-radius:4px">
+    <b>Atención:</b> {{ aviso_fuente }}
+  </div>
+  {% endif %}
+
+  <table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;border-spacing:6px 0;margin:0 -6px 14px">
+    <tr>
+      {% for valor, texto, color in [(r.respuestas, 'chequeos', '#1f2933'), (r.eta, 'alertas ETA', COLORES.eta), (r.salud, 'síntomas o lesiones', COLORES.salud), (r.bpm, 'incumplen BPM', COLORES.bpm), (r.dotacion, 'dotación / EPP', COLORES.dotacion)] %}
+      <td style="background:#f4f6f8;border-radius:4px;padding:10px;text-align:center;width:20%">
+        <div style="font-size:24px;font-weight:700;color:{{ color }}">{{ valor }}</div>
+        <div style="font-size:12px;color:#5f6b7a">{{ texto }}</div>
+      </td>
+      {% endfor %}
+    </tr>
+  </table>
+
+  {% if ia.resumen_dia %}
+  <div style="border-left:4px solid #3b6fb6;background:#eef3fb;padding:10px 12px;margin-bottom:14px">
+    <b>Resumen del día (IA):</b> {{ ia.resumen_dia }}
+  </div>
+  {% elif ia.estado not in ('ok', 'sin casos') %}
+  <div style="color:#5f6b7a;font-size:12px;margin-bottom:14px">Consejos de IA: {{ ia.estado }}. Se muestran los pasos de la guía.</div>
+  {% endif %}
+
+  {% for a in alertas %}
+  <div style="background:{{ '#fdecea' if a.nivel == 'alta' else '#fff4e5' }};border:1px solid {{ '#e57373' if a.nivel == 'alta' else '#f0b46a' }};padding:10px 12px;margin-bottom:8px;border-radius:4px">
+    <b>{{ 'Posible brote' if a.nivel == 'alta' else 'Aumento de casos' }}:</b> {{ a.texto }}
+  </div>
+  {% endfor %}
+
+  {% if r.respuestas == 0 %}
+  <p>No hay chequeos registrados para este día.</p>
+  {% endif %}
+
+  {% for s in secciones if s.casos and s.clave not in ('dotacion', 'epp') %}
+  <h2 style="font-size:17px;margin:20px 0 8px;border-bottom:2px solid {{ COLORES[s.clave] }};padding-bottom:4px">{{ s.titulo }} ({{ s.casos|length }})</h2>
+  {% if s.pasos %}
+  <div style="background:#f4f6f8;padding:8px 12px;margin-bottom:10px;border-radius:4px;font-size:13px">
+    <b>Pasos generales de la guía para estos casos</b>
+    <ol style="margin:4px 0 0 20px;padding:0">{% for p in s.pasos %}<li>{{ p }}</li>{% endfor %}</ol>
+  </div>
+  {% endif %}
+  {% for c in s.casos %}
+  <table role="presentation" cellspacing="0" cellpadding="0" id="r{{ c.id }}" style="width:100%;border:1px solid #d9dee4;border-left:5px solid {{ COLORES[c['items'][0].tipo] }};margin-bottom:10px;border-radius:4px">
+    <tr><td style="padding:10px 12px">
+      <div style="font-size:15px"><b>{% if web %}<a href="/persona/{{ c.persona|urlencode }}" style="color:inherit">{{ c.nombre }}</a>{% else %}{{ c.nombre }}{% endif %}</b>
+        <span style="color:#5f6b7a"> · {{ c.lugar }} · {{ c.fecha[11:16] }} · revisó {{ c.responsable or 'sin dato' }}</span></div>
+      {% if c.dias_salud_previos >= 2 and s.clave in ('eta', 'salud') %}
+      <div style="color:#5f6b7a;font-size:13px;margin-top:2px">Ha reportado síntomas otros {{ c.dias_salud_previos }} días en los últimos 30 días.</div>
+      {% endif %}
+      {% if c.observacion %}<div style="margin:6px 0;color:#3e4c59"><i>“{{ c.observacion }}”</i></div>{% endif %}
+      <div style="margin:6px 0">
+        {% for i in c['items'] %}
+        <div style="margin:2px 0">
+          <span style="display:inline-block;background:{{ COLORES[i.tipo] }};color:#fff;font-size:11px;padding:1px 6px;border-radius:3px">{{ NOMBRE_TIPO[i.tipo] }}</span>
+          {{ i.etiqueta }}
+          {% if i.nivel %}<span style="display:inline-block;border:1px solid {{ COLOR_NIVEL[i.nivel] }};color:{{ COLOR_NIVEL[i.nivel] }};font-size:11px;padding:0 6px;border-radius:3px">{{ NIVELES[i.nivel] }}</span>{% endif %}
+          <span style="color:#5f6b7a;font-size:12px">({{ i.origen }}{% if i.repeticiones %}; <b>{{ i.repeticiones|veces }}</b>, antes: {{ i.dias_previos|join(', ') }}{% endif %})</span>
+          {% if i.nota %}<div style="font-size:12px;color:#5f6b7a;margin-left:8px">{{ i.nota }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% for i in c['items'] if i.tipo == 'eta' %}
+      <div style="background:#fdecea;padding:8px 10px;margin:6px 0;border-radius:4px;font-size:13px">
+        <b>{{ i.etiqueta }}</b>: {{ ETA[i.clave].explicacion }}<br>
+        <b>Acción:</b> {{ ACCION_ETA }} <b>Reintegro:</b> {{ REINTEGRO_ETA }}<br>
+        <span style="color:#5f6b7a">{{ ETA[i.clave].nota }}</span>
+      </div>
+      {% endfor %}
+      {% if c.pasos %}
+      <div style="font-weight:600;margin-top:6px">{{ 'Pasos a seguir (guía)' if c['items'][0].tipo == 'eta' else 'Qué hacer ahora (guía)' }}</div>
+      <ol style="margin:4px 0 4px 20px;padding:0">{% for p in c.pasos %}<li>{{ p }}</li>{% endfor %}</ol>
+      {% endif %}
+      {% if c.ia and c.ia.consejos %}
+      <div style="background:#eef3fb;padding:8px 10px;margin-top:6px;border-radius:4px">
+        <div style="font-weight:600">Consejos (IA)</div>
+        <ul style="margin:4px 0 0 18px;padding:0">{% for x in c.ia.consejos %}<li>{{ x }}
+          {% if web %}{% set v = valoraciones.get((c.id, x)) or {} %}
+          <div class="valorar">
+            <form method="post" action="/valorar">
+              <input type="hidden" name="dia" value="{{ dia }}"><input type="hidden" name="respuesta_id" value="{{ c.id }}">
+              <input type="hidden" name="consejo" value="{{ x }}">
+              <button name="voto" value="1" class="voto {{ 'marcado' if v.voto == 1 }}" title="Útil">👍 Útil</button>
+              <button name="voto" value="-1" class="voto {{ 'marcado-no' if v.voto == -1 }}" title="No sirve">👎 No sirve</button>
+            </form>
+            <details {{ 'open' if v.correccion }}>
+              <summary>{{ 'Corrección guardada' if v.correccion else 'Corregir' }}</summary>
+              <form method="post" action="/valorar">
+                <input type="hidden" name="dia" value="{{ dia }}"><input type="hidden" name="respuesta_id" value="{{ c.id }}">
+                <input type="hidden" name="consejo" value="{{ x }}">
+                <textarea name="correccion" rows="2" placeholder="¿Cómo lo diría usted? Ej.: Preguntar si ya pidió la cita en la EPS">{{ v.correccion or '' }}</textarea>
+                <button>Guardar</button>
+              </form>
+            </details>
+          </div>
+          {% endif %}</li>{% endfor %}</ul>
+        {% if c.ia.atencion %}<div style="margin-top:4px"><b>Atención:</b> {{ c.ia.atencion }}</div>{% endif %}
+      </div>
+      {% endif %}
+    </td></tr>
+  </table>
+  {% endfor %}
+  {% endfor %}
+
+  {% for s in secciones if s.casos and s.clave == 'dotacion' %}
+  <h2 style="font-size:17px;margin:20px 0 8px;border-bottom:2px solid {{ COLORES.dotacion }};padding-bottom:4px">{{ s.titulo }} ({{ s.casos|length }})</h2>
+  <ul style="margin:0 0 8px 18px;padding:0;font-size:13px;color:#3e4c59">{% for p in pasos_dotacion %}<li>{{ p }}</li>{% endfor %}</ul>
+  <table cellspacing="0" cellpadding="6" style="width:100%;border-collapse:collapse;font-size:13px">
+    <tr style="background:#f4f6f8;text-align:left"><th>Persona</th><th>Lugar</th><th>Novedades</th></tr>
+    {% for c in s.casos %}
+    <tr style="border-top:1px solid #e4e7eb">
+      <td>{{ c.nombre }}</td><td>{{ c.lugar }}</td>
+      <td>{% for i in c['items'] %}{{ i.etiqueta }}{% if i.repeticiones %} <b style="color:#c62828">({{ i.repeticiones|veces }})</b>{% endif %}{{ '; ' if not loop.last }}{% endfor %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endfor %}
+
+  {% if epp %}
+  <h2 style="font-size:17px;margin:20px 0 8px;border-bottom:2px solid {{ COLORES.epp }};padding-bottom:4px">Elementos de protección (EPP) marcados NO</h2>
+  <ul style="margin:0 0 8px 18px;padding:0;font-size:13px;color:#3e4c59">{% for p in pasos_epp %}<li>{{ p }}</li>{% endfor %}</ul>
+  <table cellspacing="0" cellpadding="6" style="width:100%;border-collapse:collapse;font-size:13px">
+    <tr style="background:#f4f6f8;text-align:left"><th>Elemento</th><th>Personas</th><th>Quiénes</th></tr>
+    {% for elemento, nombres in epp %}
+    <tr style="border-top:1px solid #e4e7eb"><td>{{ elemento }}</td><td>{{ nombres|length }}</td><td style="color:#5f6b7a">{{ nombres|join(', ') }}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  <p style="font-size:12px;color:#5f6b7a;margin-top:24px;border-top:1px solid #e4e7eb;padding-top:8px">
+    {{ AVISO }} Fuentes: {% for k, v in FUENTES.items() %}[{{ k }}] {{ v }}{{ '; ' if not loop.last }}{% endfor %}.
+    {% if ia.modelo %}Consejos generados con {{ ia.modelo }} sin enviar nombres.{% endif %}
+  </p>
+</div>

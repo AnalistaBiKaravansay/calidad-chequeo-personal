@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block contenido %}
+<h1>Guía de pasos a seguir</h1>
+<p class="mensaje">{{ g.AVISO }}</p>
+
+<section>
+  <h2>Síntomas de alerta de posible ETA</h2>
+  <p>Si hay alguno de estos síntomas: <b>{{ g.ACCION_ETA }}</b> Reintegro: <b>{{ g.REINTEGRO_ETA }}</b> [PI]</p>
+  <div class="tabla"><table>
+    <tr><th>Síntoma</th><th>Explicación</th><th>Lo que añaden las fuentes oficiales</th></tr>
+    {% for clave, d in g.ETA.items() %}<tr><td><b>{{ clave|replace('_', ' ')|capitalize }}</b></td><td>{{ d.explicacion }}</td><td>{{ d.nota }}</td></tr>{% endfor %}
+  </table></div>
+  <h3>Pasos</h3>
+  <ol>{% for p in g.PASOS_ETA %}<li>{{ p }}</li>{% endfor %}</ol>
+</section>
+
+<section>
+  <h2>Otros síntomas: escalera de 3 niveles</h2>
+  <ol>{% for p in g.PASOS['salud'] %}<li>{{ p }}</li>{% endfor %}</ol>
+  <p>Para cada síntoma se cuentan los días con ese síntoma en los últimos 30 días y se compara con lo normal en la planta (último año):</p>
+  <ul>
+    <li><b>1. {{ g.NIVELES[1] }}:</b> lo normal. Se dan los consejos de la tabla de abajo.</li>
+    <li><b>2. {{ g.NIVELES[2] }}:</b> se repite más que 3 de cada 4 casos de la planta (y al menos {{ minimos[0] }} días). Hablar con la persona y, si es dolor muscular o lesión, pedir a SST que revise el puesto.</li>
+    <li><b>3. {{ g.NIVELES[3] }}:</b> persiste más que 9 de cada 10 casos (y al menos {{ minimos[1] }} días). Sugerir cita con su EPS.</li>
+  </ul>
+  <div class="tabla"><table>
+    <tr><th>Síntoma</th><th>Seguimiento desde</th><th>Cita médica desde</th><th>Consejo inmediato</th></tr>
+    {% for clave, consejos in g.CONSEJO_INMEDIATO.items() %}
+    <tr><td><b>{{ r.ETIQUETAS.get(clave, 'Síntoma de alerta escrito solo en la observación') }}</b></td>
+      <td>{% if clave in limites %}{{ limites[clave][0] }} días{% else %}—{% endif %}</td>
+      <td>{% if clave in limites %}{{ limites[clave][1] }} días{% else %}—{% endif %}</td>
+      <td><ul>{% for x in consejos %}<li>{{ x }}</li>{% endfor %}</ul></td></tr>
+    {% endfor %}
+  </table></div>
+  <p class="nota">Los límites se recalculan cada día con los datos de la planta. Un guion (—) significa que hay pocos casos y se usan los mínimos. Las alertas ETA marcadas SI en el formulario no usan esta escalera: siguen el protocolo de exclusión.</p>
+</section>
+
+{% for tipo, titulo in [('lesion', 'Heridas, golpes o cortadas'), ('bpm', 'Incumplimientos BPM'), ('dotacion', 'Dotación'), ('epp', 'Elementos de protección (EPP)')] %}
+<section>
+  <h2>{{ titulo }}</h2>
+  <ol>{% for p in g.PASOS[tipo] %}<li>{{ p }}</li>{% endfor %}</ol>
+  <p class="nota">Si se repite: {% if tipo == 'lesion' %}misma escalera de 3 niveles que los síntomas.{% else %}{{ g.PASO_REPETICION[tipo] }}{% endif %}</p>
+  {% if tipo == 'bpm' %}<ul>{% for p in g.BPM_ESPECIFICO.values() %}<li>{{ p }}</li>{% endfor %}</ul>{% endif %}
+</section>
+{% endfor %}
+
+<section>
+  <h2>Cómo se detectan las novedades</h2>
+  <h3>1. Preguntas del formulario</h3>
+  <ul>
+    <li><b>Estado de salud:</b> cualquiera de las 5 preguntas en <b>SI</b> es <b>Alerta ETA</b> (exclusión del área de producción).</li>
+    <li><b>Criterios BPM:</b> “No cumple” es un incumplimiento BPM.</li>
+    <li><b>Criterios EPP:</b> “NO” es EPP no usado. En el reporte diario se resume por elemento.</li>
+    <li><b>Gafas:</b> solo si “Usa gafas” es SI. “Tiene cordón” en NO es gafas sin cordón; “buen estado” en NO es gafas en mal estado.</li>
+  </ul>
+  <h3>2. Palabras en las observaciones</h3>
+  <div class="tabla"><table>
+    <tr><th>Tipo</th><th>Novedad</th><th>Palabras que la detectan</th></tr>
+    {% for tipo, clave, _ in r.PALABRAS %}
+    <tr><td>{{ r.TIPO_OBSERVACION[tipo] }}</td><td>{{ r.ETIQUETAS.get(clave, clave) }}</td><td>{{ r.EJEMPLOS.get(clave, '') }}</td></tr>
+    {% endfor %}
+  </table></div>
+  <ul>
+    <li>Un síntoma de alerta ETA escrito <b>solo en la observación</b> no es alerta: aparece como <b>“Mencionado: verificar”</b>, porque la pregunta del formulario es la que trae el criterio (por ejemplo, más de 3 deposiciones en 24 h). “Fiebre” y “garganta” en la misma observación cuentan como fiebre + dolor de garganta.</li>
+    <li><b>Negación:</b> “no presenta…”, “sin…”, “niega…”, “ni…” anulan el síntoma (“no presenta tos” no es novedad). En dotación no se anula: “no tiene botas” sí es novedad.</li>
+    <li><b>Embarazo + vómito:</b> no es alerta de ETA (procedimiento interno).</li>
+    <li>Una observación que no encaja en ninguna regla queda como <b>“Observación por revisar”</b>, nunca se descarta. Frases como “sin novedad”, “ninguna”, “todo bien” o “cumple” no generan nada.</li>
+  </ul>
+  <h3>3. Repeticiones y patrones</h3>
+  <ul>
+    <li><b>Repetición:</b> para cada novedad se cuentan los días anteriores en que la misma persona la tuvo, en los últimos 30 días. Desde la 3.ª vez, o con 3 o más días con síntomas en el mes, se agrega el paso de valoración médica o de refuerzo de capacitación.</li>
+    <li><b>Posible brote:</b> personas del mismo lugar con síntomas parecidos el mismo día.
+      <ul>
+        <li>Desde <b>2 personas</b> con diarrea o vómito, o con ictericia. Así define el brote de ETA el Instituto Nacional de Salud [INS].</li>
+        <li>Desde <b>3 personas</b> con cualquier síntoma digestivo (incluye cólicos y dolor de estómago), respiratorio (fiebre, garganta, gripa) o de piel o heridas infectadas, porque son más comunes.</li>
+      </ul>
+    </li>
+    <li><b>Aumento de casos:</b> en los últimos 7 días hay 5 o más casos de un grupo, y son el doble o más del promedio semanal de las 8 semanas anteriores.</li>
+    <li>La persona se identifica por el nombre escrito en el formulario. Si se escribe distinto, cuenta como otra persona.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Lo que la IA ha aprendido de Calidad</h2>
+  <p>En el reporte del día, cada consejo de la IA tiene <b>👍 Útil</b>, <b>👎 No sirve</b> y <b>Corregir</b>. Las marcas más recientes se envían como ejemplos en la consulta diaria, sin nombres, para que la IA imite lo útil y evite lo que no sirve.</p>
+  <p>Marcas hasta hoy: <b>{{ aprendizaje.utiles }}</b> útiles · <b>{{ aprendizaje.no_utiles }}</b> no sirven · <b>{{ aprendizaje.corregidos }}</b> corregidos.</p>
+  {% if aprendizaje.ultimas %}
+  <div class="tabla"><table>
+    <tr><th>Día</th><th>Caso</th><th>La IA dijo</th><th>Calidad prefiere</th></tr>
+    {% for u in aprendizaje.ultimas %}<tr><td class="sin-salto">{{ u.dia }}</td><td>{{ u.situacion }}</td><td>{{ u.consejo }}</td><td>{{ u.correccion }}</td></tr>{% endfor %}
+  </table></div>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Fuentes</h2>
+  <ul>{% for k, v in g.FUENTES.items() %}<li>[{{ k }}] {{ v }}</li>{% endfor %}</ul>
+  <p class="nota">Las copias de los documentos oficiales están en la carpeta <code>docs/fuentes</code> del proyecto. El detalle con las citas está en <code>docs/GUIA_SALUD_MANIPULADORES.md</code>.</p>
+</section>
+{% endblock %}

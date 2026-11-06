@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.db
+*.xlsx
+*.csv
+*.log
+*.env
+clave_gemini.txt
+bd_nube.txt

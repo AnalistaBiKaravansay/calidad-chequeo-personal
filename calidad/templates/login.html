@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Calidad · Entrar</title>
+  <link rel="stylesheet" href="/static/estilo.css">
+</head>
+<body>
+  <header><strong>Calidad · Chequeo de personal</strong></header>
+  <main>
+    <form method="post" action="/login" class="login">
+      <h1>Entrar</h1>
+      <p class="nota">Esta página tiene información de salud del personal. Solo para el equipo de Calidad.</p>
+      {% if error %}<div class="mensaje">Clave incorrecta.</div>{% endif %}
+      <input type="hidden" name="volver" value="{{ volver }}">
+      <label>Clave <input type="password" name="clave" autofocus required autocomplete="current-password"></label>
+      <button>Entrar</button>
+    </form>
+  </main>
+</body>
+</html>

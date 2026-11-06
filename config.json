@@ -1,0 +1,18 @@
+{
+  "excel_flujo": "C:\\Users\\angie.marquez\\OneDrive - BIODISTRIBUCIONES TERRA S A S\\seguimiento BPM\\Respuestas Forms (flujo).xlsx",
+  "correo_destino": ["analistacomercial@karavansay.com"],
+  "envio": "onedrive",
+  "carpeta_envio": "C:\\Users\\angie.marquez\\OneDrive - BIODISTRIBUCIONES TERRA S A S\\Reportes chequeo personal",
+  "dias_historial": 30,
+  "ia_modelos": [
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3-flash-preview",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-flash-lite-latest"
+  ],
+  "carpeta_datos": ""
+}
