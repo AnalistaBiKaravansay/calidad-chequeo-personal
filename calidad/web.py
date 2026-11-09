@@ -148,9 +148,10 @@ async def respuesta_del_flujo(request: Request, tareas: BackgroundTasks):
         await asyncio.sleep(1)   # frena los intentos de adivinar el token
         return JSONResponse({"ok": False, "error": "Token inválido o entrada apagada."}, status_code=401)
     try:
-        cuerpo = await request.json()
+        cuerpo = flujo.leer_cuerpo(await request.body(), request.headers)
         resultado, dias_ia = await run_in_threadpool(flujo.recibir, cuerpo)
     except ValueError as e:   # JSON mal formado, falta Id o fecha: el flujo lo marca como fallido
+        print("Entrada del flujo rechazada:", e)   # queda en los registros (Logs) de Render
         return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
     if dias_ia:
         tareas.add_task(flujo.consejos_ia, dias_ia)

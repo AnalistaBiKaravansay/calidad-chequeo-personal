@@ -125,7 +125,24 @@ def _fecha(valor):
     try:
         return datetime.fromisoformat(texto)
     except ValueError:
+        pass
+    try:
         return datetime.strptime(texto, "%d/%m/%Y %H:%M:%S")
+    except ValueError:
+        pass
+    # Formatos con que puede llegar desde el conector de Excel de Power Automate (entrada directa, flujo.py).
+    try:
+        return from_excel(float(texto.replace(",", ".")))   # número de serie de Excel como texto
+    except ValueError:
+        pass
+    texto_iso = texto.rstrip("Zz").split(".")[0]
+    for formato in ("%Y-%m-%dT%H:%M:%S", "%m/%d/%Y %I:%M:%S %p", "%m/%d/%Y %H:%M:%S", "%d/%m/%Y %H:%M",
+                    "%m/%d/%Y %I:%M %p"):
+        try:
+            return datetime.strptime(texto_iso if "T" in formato else texto, formato)
+        except ValueError:
+            continue
+    raise ValueError(f"Fecha con formato desconocido: {texto!r}")
 
 
 def _copia_local(ruta, intentos=6, espera=10):

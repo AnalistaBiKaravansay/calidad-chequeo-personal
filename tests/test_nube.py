@@ -279,10 +279,11 @@ def test_ruta_de_windows_se_respeta_en_el_servidor():
 
 
 def _como_conector(f):
-    """Así devuelve la fila el conector de Excel de Power Automate: todo texto, vacíos como "", con metadatos."""
+    """Así devuelve la fila el conector de Excel de Power Automate: todo texto, vacíos como "", con metadatos y
+    con el punto de los encabezados en código (_x002e_)."""
     salida = {"@odata.etag": "", "ItemInternalId": "abc-123"}
     for k, v in f.items():
-        salida[k] = "" if v is None else (v.isoformat(sep=" ") if hasattr(v, "isoformat") else str(v))
+        salida[k.replace(".", "_x002e_")] = "" if v is None else (v.isoformat(sep=" ") if hasattr(v, "isoformat") else str(v))
     return salida
 
 
@@ -299,6 +300,8 @@ def test_flujo_envia_respuestas_directo(carpeta, monkeypatch):
     assert c.post("/api/respuesta", json=nueva, headers={"x-token": "otro"}).status_code == 401
     assert c.post("/api/respuesta", json=nueva).status_code == 401
     assert c.post("/api/respuesta", json={"NOMBRE1": "x"}, headers={"x-token": "token-de-prueba"}).status_code == 400
+    r = c.post("/api/respuesta", content=b"", headers={"x-token": "token-de-prueba"})
+    assert r.status_code == 400 and "vacío" in r.json()["error"]
 
     r = c.post("/api/respuesta", json=nueva, headers={"x-token": "token-de-prueba"})
     assert r.status_code == 200 and r.json()["guardadas"] == [{"id": 70, "fecha": "2026-11-09 08:02:00",

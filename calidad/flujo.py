@@ -8,13 +8,18 @@ actualiza la misma fila (misma Id) y no se duplica.
 Protección: encabezado "x-token" igual a CALIDAD_TOKEN_FLUJO (Render lo genera). Sin ese valor configurado,
 la entrada está apagada.
 """
+import gzip
 import hmac
+import json
 import os
+import re
 import threading
 from contextlib import closing
 
 from . import datos, reporte
 
+# El conector de Excel escribe algunos caracteres de los encabezados en código: "BPM_x002e_Uso" = "BPM.Uso".
+_CODIGO = re.compile(r"_x([0-9A-Fa-f]{4})_")
 # Columnas que agrega el conector de Excel y que no son del formulario.
 _AJENAS = ("ItemInternalId",)
 _ia_candado = threading.Lock()
@@ -30,17 +35,47 @@ def token_valido(recibido):
     return bool(esperado) and hmac.compare_digest((recibido or "").strip().encode(), esperado.encode())
 
 
+def leer_cuerpo(crudo, encabezados):
+    """Bytes recibidos -> JSON. Acepta gzip y textos en UTF-8 (con o sin BOM) o Latin-1."""
+    if crudo[:2] == bytes([0x1F, 0x8B]) or "gzip" in encabezados.get("content-encoding", ""):
+        crudo = gzip.decompress(crudo)
+    if not crudo.strip():
+        raise ValueError(f"Llegó el cuerpo vacío (Content-Type: {encabezados.get('content-type', '-')}). "
+                         "En la acción HTTP, el Body debe ser body('Nombre_de_la_accion_de_Excel').")
+    try:
+        texto = crudo.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        texto = crudo.decode("latin-1")
+    try:
+        return json.loads(texto)
+    except ValueError:
+        raise ValueError(f"El cuerpo no es JSON ({len(crudo)} bytes, Content-Type: "
+                         f"{encabezados.get('content-type', '-')}, empieza por {texto[:1]!r}).")
+
+
+def _encabezado(nombre):
+    return " ".join(_CODIGO.sub(lambda m: chr(int(m.group(1), 16)), str(nombre)).split(" ")).strip()
+
+
 def limpiar(fila):
     """Deja la fila como la lee el puente del Excel: sin metadatos del conector, vacíos como None, Id numérica."""
+    if isinstance(fila, str):   # el flujo envió el JSON como texto
+        try:
+            fila = json.loads(fila)
+        except ValueError:
+            raise ValueError("El cuerpo es texto, no la fila del Excel. Use la expresión body('Nombre_de_la_accion').")
+    if isinstance(fila, dict) and "Id" not in fila and isinstance(fila.get("body"), dict):
+        fila = fila["body"]   # se envió outputs(...) en vez de body(...)
     if not isinstance(fila, dict):
         raise ValueError("Cada respuesta debe ser un objeto con las columnas del Excel.")
     limpia = {}
     for k, v in fila.items():
         if str(k).startswith("@") or k in _AJENAS:
             continue
-        limpia[str(k).strip()] = None if (v is None or (isinstance(v, str) and not v.strip())) else v
+        limpia[_encabezado(k)] = None if (v is None or (isinstance(v, str) and not v.strip())) else v
     if limpia.get("Id") in (None, ""):
-        raise ValueError("Falta la columna Id.")
+        # Solo los nombres de las columnas (nunca los valores, que pueden ser datos de salud).
+        raise ValueError("Falta la columna Id. Columnas recibidas: " + ", ".join(list(limpia)[:40]))
     try:
         limpia["Id"] = int(float(str(limpia["Id"]).strip()))
     except ValueError:
