@@ -70,7 +70,9 @@ Abrir **Configuracion\PROGRAMAR_ENVIO_DIARIO.cmd** y pulsar Enter (11:00). Crea 
 - **Calidad NUBE - subir datos:** cada 30 minutos, de 5:00 a 12:00. Sube lo nuevo y pide los consejos de IA de los casos nuevos.
 - **Calidad NUBE - reporte diario:** de lunes a sábado a las 11:00. Envía el correo con los consejos ya guardados.
 
-El detalle de cada ejecución queda en `%USERPROFILE%\CalidadKaravansayNube\registro.txt`.
+Las tareas corren también con el portátil en batería y, si el equipo estaba apagado a la hora, se ejecutan apenas se encienda. El detalle de cada ejecución queda en `%USERPROFILE%\CalidadKaravansayNube\registro.txt`.
+
+**Si dejan de entrar respuestas:** revisar `registro.txt`. Si no tiene líneas recientes, la tarea no está arrancando: en el Programador de tareas de Windows, ver el "Resultado de la última ejecución" de *Calidad NUBE - subir datos* (0x800710E0 = Windows la rechazó por estar en batería; se arregla volviendo a ejecutar `PROGRAMAR_ENVIO_DIARIO.cmd`). Para subir en el momento: doble clic en `Configuracion\SUBIR_DATOS.cmd`.
 
 ## Comandos
 | Comando | Qué hace |
