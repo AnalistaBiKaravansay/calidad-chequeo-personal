@@ -14,9 +14,10 @@
       <img src="/static/logo.svg?v={{ V }}" alt="Karavansay" width="162" height="72">
       <h1>Calidad · Chequeo de personal</h1>
       <p class="nota">Información de salud del personal. Solo para el equipo de Calidad.</p>
-      {% if error %}<div class="mensaje" role="alert">Clave incorrecta.</div>{% endif %}
+      {% if error %}<div class="mensaje" role="alert">Usuario o clave incorrectos.</div>{% endif %}
       <input type="hidden" name="volver" value="{{ volver }}">
-      <label>Clave <input type="password" name="clave" autofocus required autocomplete="current-password"></label>
+      <label>Usuario <input name="usuario" value="{{ request.query_params.get('usuario', '') }}" required autocomplete="username" autocapitalize="none" spellcheck="false" {{ '' if request.query_params.get('usuario') else 'autofocus' }}></label>
+      <label>Clave <input type="password" name="clave" required autocomplete="current-password" {{ 'autofocus' if request.query_params.get('usuario') }}></label>
       <button class="principal">Entrar</button>
     </form>
   </main>

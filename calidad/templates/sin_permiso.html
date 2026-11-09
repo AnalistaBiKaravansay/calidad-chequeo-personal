@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block titulo %}Sin acceso{% endblock %}
+{% block contenido %}
+<section class="sin-acceso">
+  <h1>Esta sección no está en su perfil</h1>
+  {% if yo %}
+  <p class="nota">Usted entró como <b>{{ yo.usuario }}</b> con el perfil <b>{{ yo.perfil }}</b>. Si necesita verla, pídale al administrador que le cambie el perfil.</p>
+  {% else %}
+  <p class="nota">En este equipo se entra sin usuario porque todavía no hay usuarios creados. La Administración solo la ve el usuario <b>admin</b>: créelo con <code>python -m calidad crear-admin</code> y entre con él.</p>
+  {% endif %}
+  <div class="barra">
+    {% if inicio %}<a class="boton principal" href="{{ inicio }}">Ir a mis secciones</a>{% endif %}
+    {% if yo %}<a class="boton" href="/salir">Entrar con otro usuario</a>{% endif %}
+  </div>
+</section>
+{% endblock %}

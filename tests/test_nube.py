@@ -1,11 +1,12 @@
-"""Pruebas de la versión en la nube: inicio de sesión, modo nube, puente y copia de la base (datos inventados)."""
+"""Pruebas de la versión en la nube: usuarios y perfiles, modo nube, puente y copia de la base (datos inventados)."""
 import sqlite3
+from contextlib import closing
 
 import openpyxl
 import pytest
 from fastapi.testclient import TestClient
 
-from calidad import config, datos, web
+from calidad import config, datos, usuarios, web
 from test_calidad import SALUD, fila
 
 
@@ -18,43 +19,102 @@ def carpeta(tmp_path, monkeypatch):
     return tmp_path
 
 
-def cliente(monkeypatch, clave="", nube=False):
-    monkeypatch.setenv("CALIDAD_CLAVE", clave)
+def cliente(monkeypatch, nube=False, admin=""):
+    """Cliente de la página. admin='clave' crea el usuario admin y entra con él."""
     monkeypatch.setenv("CALIDAD_NUBE", "1" if nube else "")
     web._ultima_sincronizacion = 9e18
-    return TestClient(web.app)
+    usuarios.olvidar()
+    c = TestClient(web.app, base_url="https://testserver")   # en la nube la cookie es solo https
+    if admin:
+        with closing(datos.conectar()) as con:
+            usuarios.asegurar_admin(con, admin)
+        entrar(c, "admin", admin)
+    return c
 
 
-def test_sin_clave_no_pide_inicio_de_sesion(carpeta, monkeypatch):
-    assert cliente(monkeypatch).get("/guia").status_code == 200
+def entrar(c, usuario, clave, volver="/"):
+    return c.post("/login", data={"usuario": usuario, "clave": clave, "volver": volver}, follow_redirects=False)
 
 
-def test_con_clave_exige_inicio_de_sesion(carpeta, monkeypatch):
-    c = cliente(monkeypatch, clave="secreta")
+def test_sin_usuarios_en_el_pc_no_pide_inicio_de_sesion(carpeta, monkeypatch):
+    c = cliente(monkeypatch)
+    assert c.get("/guia").status_code == 200
+    # Pero la Administración no: solo la ve el usuario admin.
+    assert c.get("/admin").status_code == 403
+    assert "Administración" not in c.get("/guia").text
+
+
+def test_con_usuarios_exige_inicio_de_sesion(carpeta, monkeypatch):
+    c = cliente(monkeypatch, nube=True)
     r = c.get("/datos?lugar=PLANTA%202", follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"].startswith("/login?volver=/datos")
     assert c.get("/salud").status_code == 200   # Render la usa sin clave
-    r = c.post("/login", data={"clave": "mala", "volver": "/datos"}, follow_redirects=False)
+    with closing(datos.conectar()) as con:
+        usuarios.asegurar_admin(con, "Prueba123*")
+    r = entrar(c, "admin", "mala", "/datos")
     assert "error=1" in r.headers["location"] and "calidad_sesion" not in r.cookies
-    r = c.post("/login", data={"clave": "secreta", "volver": "/datos"}, follow_redirects=False)
+    r = entrar(c, "ADMIN ", "Prueba123*", "/datos")   # el usuario no distingue mayúsculas ni espacios
     assert r.headers["location"] == "/datos"
-    assert c.get("/datos").status_code == 200
-    # Cambiar la clave cierra las sesiones abiertas.
-    monkeypatch.setenv("CALIDAD_CLAVE", "otra")
+    assert c.get("/datos", follow_redirects=False).status_code == 200
+    # Cambiar la clave del usuario cierra sus sesiones abiertas.
+    with closing(datos.conectar()) as con:
+        usuarios.asegurar_admin(con, "OtraClave1")
     assert c.get("/datos", follow_redirects=False).status_code == 303
 
 
 def test_login_no_redirige_a_otro_sitio(carpeta, monkeypatch):
-    c = cliente(monkeypatch, clave="secreta")
-    r = c.post("/login", data={"clave": "secreta", "volver": "//sitio-malo.com"}, follow_redirects=False)
+    c = cliente(monkeypatch, nube=True, admin="Prueba123*")
+    c.cookies.clear()
+    r = entrar(c, "admin", "Prueba123*", "//sitio-malo.com")
     assert r.headers["location"] == "/"
+
+
+def test_admin_crea_perfiles_y_usuarios_con_permisos(carpeta, monkeypatch):
+    c = cliente(monkeypatch, nube=True, admin="Prueba123*")
+    pagina = c.get("/admin", follow_redirects=False)
+    assert pagina.status_code == 200 and "Crear usuario" in pagina.text
+    # Perfil nuevo que solo ve el Tablero; 'admin' no se puede asignar aunque se envíe.
+    r = c.post("/admin/perfil", data={"nombre": "Supervisores", "nuevo": "1", "permisos": ["tablero", "admin"]})
+    assert "Perfil Supervisores guardado" in r.text
+    r = c.post("/admin/usuario/nuevo", data={"usuario": "Ana Mal", "nombre": "Ana", "perfil": "Supervisores",
+                                              "clave": "clave123"})
+    assert "minúsculas" in r.text   # usuario con espacio: no se crea
+    r = c.post("/admin/usuario/nuevo", data={"usuario": "ana.p", "nombre": "Ana P", "perfil": "Supervisores",
+                                              "clave": "corta"})
+    assert "al menos 8" in r.text
+    c.post("/admin/usuario/nuevo", data={"usuario": "ana.p", "nombre": "Ana P", "perfil": "Supervisores",
+                                         "clave": "clave123"})
+    with closing(datos.conectar()) as con:
+        guardada = con.execute("SELECT clave FROM usuarios WHERE usuario='ana.p'").fetchone()[0]
+    assert guardada.startswith("pbkdf2$") and "clave123" not in guardada
+
+    ana = cliente(monkeypatch, nube=True)
+    assert entrar(ana, "ana.p", "clave123").status_code == 303
+    assert ana.get("/", follow_redirects=False).headers["location"] == "/tablero"   # su primera sección
+    assert ana.get("/tablero", follow_redirects=False).status_code == 200
+    menu = ana.get("/tablero").text
+    assert "Ana P" in menu and 'href="/datos"' not in menu and 'href="/admin"' not in menu
+    assert ana.get("/datos").status_code == 403
+    assert ana.get("/admin").status_code == 403
+    assert ana.post("/admin/usuario/borrar", data={"usuario": "admin"}).status_code == 403
+
+    # El perfil con usuarios no se borra; el admin no se borra ni se desactiva.
+    assert "tiene usuarios" in c.post("/admin/perfil/borrar", data={"nombre": "Supervisores"}).text
+    assert "no se puede borrar" in c.post("/admin/usuario/borrar", data={"usuario": "admin"}).text
+    c.post("/admin/usuario/editar", data={"usuario": "admin", "nombre": "Admin", "perfil": "Consulta"})
+    assert c.get("/admin").status_code == 200
+
+    # Desactivar a Ana cierra su sesión.
+    c.post("/admin/usuario/editar", data={"usuario": "ana.p", "nombre": "Ana P", "perfil": "Supervisores"})
+    assert ana.get("/tablero", follow_redirects=False).status_code == 303
+    assert entrar(ana, "ana.p", "clave123").headers["location"].startswith("/login")
 
 
 def test_modo_nube_no_lee_excel_ni_ofrece_correo(carpeta, monkeypatch):
     con = datos.conectar()
     datos.guardar(con, fila(1, fecha="2026-10-20 08:00:00")); con.commit(); con.close()
     monkeypatch.setattr(datos, "sincronizar", lambda *a, **k: pytest.fail("en la nube no se leen los Excel"))
-    c = cliente(monkeypatch, nube=True)
+    c = cliente(monkeypatch, nube=True, admin="Prueba123*")
     assert "Enviar por correo" not in c.get("/?dia=2026-10-20").text
     r = c.post("/recargar", data={"volver": "/"})
     assert "PC puente" in r.text

@@ -162,3 +162,30 @@ section > details > summary { cursor: pointer; list-style-position: outside; }
   .cabecera, .acciones, .barra, .valorar { display: none !important; }
   body { background: #fff; }
 }
+
+/* Usuario en la cabecera y Administración */
+.quien { font-size: .82rem; color: var(--suave); max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mensaje.error { background: var(--rojo-claro); border-color: var(--rojo-claro); border-left-color: var(--rojo); }
+button.peligro { color: var(--rojo); border-color: var(--rojo-claro); }
+button.peligro:hover { background: var(--rojo-claro); border-color: var(--rojo); }
+.sin-acceso { max-width: 640px; }
+table.admin td { vertical-align: middle; }
+table.admin tr.inactivo td { color: var(--suave); }
+.estado { display: inline-block; font-size: .76rem; font-weight: 600; padding: .05rem .5rem; border-radius: 999px; background: var(--pista); color: var(--suave); }
+.estado.activo { background: var(--verde-claro); color: var(--verde); }
+details.editar > summary { list-style: none; cursor: pointer; font-size: .82rem; padding: .25rem .6rem; }
+details.editar > summary::-webkit-details-marker { display: none; }
+details.editar[open] > summary { background: var(--amarillo-claro); }
+.panel-editar { display: flex; flex-direction: column; gap: .6rem; padding: .75rem; margin-top: .4rem; background: var(--superficie-2); border: 1px solid var(--borde); border-radius: 10px; width: min(300px, 78vw); }
+.panel-editar .filtros { flex-direction: column; align-items: stretch; }
+.panel-editar form { margin: 0; }
+.perfiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: .75rem; }
+.perfil { display: flex; flex-direction: column; gap: .35rem; margin: 0; padding: .85rem 1rem; border: 1px solid var(--borde); border-top: 4px solid var(--barra); border-radius: 10px; background: var(--superficie); }
+.perfil.fijo { border-top-color: var(--amarillo); background: var(--superficie-2); }
+.perfil.nuevo { border-style: dashed; border-top-style: solid; border-top-color: var(--amarillo-osc); }
+.perfil-cabeza { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; margin-bottom: .2rem; }
+.perfil label.check { display: flex; gap: .45rem; align-items: flex-start; font-size: .86rem; }
+.perfil label.check input { margin-top: .25rem; }
+.perfil label.campo { display: flex; flex-direction: column; gap: .25rem; font-size: .78rem; font-weight: 600; color: var(--suave); }
+.perfil .barra { margin-top: .35rem; }
+@media (max-width: 720px) { .quien { display: none; } }

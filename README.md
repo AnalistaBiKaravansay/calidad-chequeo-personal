@@ -1,6 +1,6 @@
 # Chequeo diario de personal · Calidad (versión en la nube)
 
-Misma herramienta que `PROYECTO-CALIDAD` (reporte del día, tablero, datos, guía, consejos de IA con 👍/👎), publicada en internet con clave compartida para que Calidad la use desde cualquier lugar.
+Misma herramienta que `PROYECTO-CALIDAD` (reporte del día, tablero, datos, guía, consejos de IA con 👍/👎), publicada en internet con usuario y clave para que Calidad la use desde cualquier lugar.
 
 ## Cómo funciona
 
@@ -13,7 +13,7 @@ Forms → Power Automate → "Respuestas Forms (flujo).xlsx" en OneDrive
                                    │
                  Base de datos en la nube: Neon (PostgreSQL)
                                    │
-          Página en la nube: Render (con clave compartida)  ←  Calidad
+          Página en la nube: Render (usuario y clave)  ←  Calidad
 ```
 
 - **El PC puente lee el Excel** del flujo y **escribe en la base de la nube**. Solo sube respuestas nuevas o modificadas.
@@ -29,6 +29,25 @@ Forms → Power Automate → "Respuestas Forms (flujo).xlsx" en OneDrive
 - **Tablero general:** indicadores de los últimos 30 días frente a los 30 anteriores (chequeos y personas, alertas ETA, síntomas o lesión, BPM, EPP, dotación), síntomas por semana, lo más reportado en 90 días (síntomas, criterios BPM, EPP, dotación), quién repite síntomas y quién reincide en BPM/EPP/dotación, cifras por lugar y por responsable del chequeo, y la evolución mes a mes. Al pasar el mouse por una barra se ve el valor exacto.
 - **Ficha de persona:** en el buscador del tablero se escribe el nombre **o una parte** ("dayana", "gonzalez"); si coinciden varias personas, se elige de la lista. La ficha muestra chequeos, último chequeo, % sin novedad, días con síntomas (30, 90 y total), y por cada categoría (ETA, síntomas, lesiones, por revisar, BPM, EPP, dotación) **cuántas veces y en qué fechas** tuvo cada novedad (cada fecha abre el reporte de ese día), el mes a mes, las últimas observaciones y el historial completo. Los nombres del reporte y de Datos llevan a esta ficha.
 - **Nombres numerados:** el formulario a veces escribe "12. Dayana Salcedo". La numeración se quita al guardar, así que cada persona aparece una sola vez y sus síntomas repetidos se cuentan juntos (antes 238 nombres, ahora 138). Si un nombre se escribe muy distinto (otra ortografía), sigue apareciendo por separado.
+
+## Usuarios, perfiles y Administración
+
+Se entra con **usuario y clave**. Cada usuario tiene un **perfil**, y el perfil dice qué secciones ve; el menú solo muestra esas.
+
+- **Administración** (menú superior): crear, editar, desactivar o borrar usuarios, cambiarles la clave, y crear o editar perfiles marcando sus secciones. **Solo la ve el usuario `admin`**, y ese permiso no se puede dar a ningún perfil.
+- **Perfiles iniciales:**
+
+  | Perfil | Ve |
+  |---|---|
+  | Administrador | Todo (fijo, no se edita) |
+  | Calidad | Reporte del día, Tablero, Datos y descarga, Guía, y las acciones (pedir IA, marcar 👍/👎, enviar correo) |
+  | Consulta | Reporte del día, Tablero, Guía (sin acciones) |
+
+- El usuario `admin` no se puede borrar ni desactivar. Su clave la tiene Calidad; para cambiarla: Administración → Editar, o `python -m calidad crear-admin`.
+- **Desactivar** un usuario (desmarcar *Activo*) le quita el acceso de inmediato y conserva el registro; **cambiarle la clave** cierra sus sesiones abiertas.
+- Las claves se guardan cifradas (PBKDF2), nunca en texto. Usuario: minúsculas sin espacios ni tildes (ej. `maria.gomez`). Clave: mínimo 8 caracteres, con letras y números o símbolos.
+- La sesión dura 30 días en el mismo navegador. Si alguien entra a una sección que no está en su perfil, ve un aviso y un botón a sus secciones.
+- En este PC, si la base no tuviera ningún usuario, la página abre sin clave (pero sin Administración). Con la base de Neon ya hay usuarios, así que siempre pide entrar.
 
 ## Ahorro de espacio, consultas y uso de IA
 
@@ -57,10 +76,11 @@ Repositorio **privado** `AnalistaBiKaravansay/calidad-chequeo-personal`. El `.gi
 ### 3. Página (Render)
 1. Crear una cuenta gratuita en <https://render.com> con **Sign in with GitHub**.
 2. **New → Blueprint** → elegir el repositorio. Render lee `render.yaml` (región Virginia, plan gratuito).
-3. Escribir los tres valores secretos:
+3. Escribir los dos valores secretos:
    - `DATABASE_URL`: la cadena de conexión de Neon (está en `%USERPROFILE%\CalidadKaravansayNube\bd_nube.txt`).
    - `GEMINI_API_KEY`: la clave de Gemini (`clave_gemini.txt` en la misma carpeta).
-   - `CALIDAD_CLAVE`: la clave compartida para entrar a la página.
+
+   `CALIDAD_SECRETO` (firma de las sesiones) lo inventa Render solo. Los usuarios están en la base: el usuario `admin` ya está creado en Neon, así que no hay que poner ninguna clave de la página en Render.
 4. Al terminar, Render da el enlace (`https://….onrender.com`).
 
 En el plan gratuito, Render apaga la página tras 15 minutos sin uso; la primera visita después tarda cerca de un minuto en abrir. No se pierde nada: los datos están en Neon.
@@ -83,10 +103,11 @@ Las tareas corren también con el portátil en batería y, si el equipo estaba a
 | `python -m calidad clave-bd` / `clave-ia` | Guarda la dirección de Neon / la clave de Gemini en este PC. |
 | `python -m calidad probar-bd` | Comprueba la conexión. |
 | `python -m calidad subir` | Copia la base de la versión local a la nube. |
+| `python -m calidad crear-admin` | Crea el usuario `admin` o le cambia la clave (la pide sin mostrarla). |
 | `python -m calidad compactar` | Pasa respuestas en formato antiguo al compacto, quita la numeración de los nombres y libera el espacio. |
 
 ## Archivos y datos privados
-- Datos privados del PC puente: `%USERPROFILE%\CalidadKaravansayNube` (`bd_nube.txt`, `clave_gemini.txt`, `firmas.json`, reportes, `registro.txt`). No están en la carpeta de red ni en GitHub.
+- Datos privados del PC puente: `%USERPROFILE%\CalidadKaravansayNube` (`bd_nube.txt`, `clave_gemini.txt`, `secreto_sesion.txt`, `firmas.json`, reportes, `registro.txt`). No están en la carpeta de red ni en GitHub.
 - **ABRIR_TABLERO.cmd** abre esta versión en el PC (puerto 8766), conectada a la misma base de la nube.
 - La versión local (`PROYECTO-CALIDAD`, puerto 8765) sigue funcionando sola y no se modifica.
 
@@ -105,7 +126,8 @@ Configuracion\INSTALAR.cmd                       (instala requirements-dev.txt: 
 | `calidad/reglas.py` | Detección de novedades; `limpiar_nombre` quita la numeración de los nombres |
 | `calidad/ia.py` | Consejos de Gemini por caso (solo los casos nuevos), marcas 👍/👎 |
 | `calidad/guia.py` | Pasos de la guía; `texto_para_ia()` envía solo la parte que aplica |
-| `calidad/web.py` | Página; inicio de sesión con `CALIDAD_CLAVE`; modo nube con `CALIDAD_NUBE=1`; gzip y caché |
+| `calidad/web.py` | Página; inicio de sesión y permiso por sección (`PERMISO_DE_RUTA`), Administración (`/admin`); modo nube con `CALIDAD_NUBE=1`; gzip y caché |
+| `calidad/usuarios.py` | Usuarios y perfiles: claves cifradas, permisos, lista en memoria (se relee cada minuto o al cambiar algo) |
 | `calidad/templates`, `calidad/static` | Diseño con la paleta de Karavansay (igual que Capacitaciones) y el logo. `_graficas.html`: barras en HTML/CSS; `_ficha.html`: ficha de persona |
 | `render.yaml` | Configuración de Render |
 

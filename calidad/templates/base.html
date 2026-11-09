@@ -17,16 +17,18 @@
         <span><b>Calidad</b><small>Chequeo de personal</small></span>
       </a>
       <nav class="menu" aria-label="Secciones">
-        {% for ruta, plantilla, texto in [('/', 'hoy.html', 'Reporte del día'), ('/tablero', 'tablero.html', 'Tablero'), ('/datos', 'datos.html', 'Datos'), ('/guia', 'guia.html', 'Guía')] %}
+        {% for ruta, plantilla, texto, _ in menu %}
         <a href="{{ ruta }}" {% if pagina == plantilla %}aria-current="page"{% endif %}>{{ texto }}</a>
         {% endfor %}
       </nav>
       <div class="acciones">
+        {% if menu %}
         <form method="post" action="/recargar">
           <input type="hidden" name="volver" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
           <button class="discreto" title="{{ 'Ver cuándo subió datos el PC puente' if NUBE else 'Leer ahora las respuestas nuevas del Forms' }}">⟳ Recargar</button>
         </form>
-        {% if request.cookies.get('calidad_sesion') %}<a class="boton discreto" href="/salir">Salir</a>{% endif %}
+        {% endif %}
+        {% if yo %}<span class="quien" title="Perfil: {{ yo.perfil }}">{{ yo.nombre }}</span><a class="boton discreto" href="/salir">Salir</a>{% endif %}
       </div>
     </div>
   </header>

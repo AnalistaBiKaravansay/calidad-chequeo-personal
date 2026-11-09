@@ -56,6 +56,12 @@ def url_bd(cfg=None):
     return _privado("DATABASE_URL", "bd_nube.txt", cfg)
 
 
-def clave_pagina():
-    """Clave compartida para entrar a la página. Vacía = sin inicio de sesión (uso local)."""
-    return os.environ.get("CALIDAD_CLAVE", "").strip()
+def secreto_sesion():
+    """Firma las sesiones. En Render lo genera el Blueprint (CALIDAD_SECRETO); en el PC se crea una vez en un
+    archivo. Si cambia, todas las sesiones abiertas se cierran."""
+    valor = _privado("CALIDAD_SECRETO", "secreto_sesion.txt")
+    if not valor:
+        import secrets
+        valor = secrets.token_hex(32)
+        (carpeta_datos() / "secreto_sesion.txt").write_text(valor, encoding="utf-8")
+    return valor

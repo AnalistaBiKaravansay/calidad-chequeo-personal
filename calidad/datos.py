@@ -60,6 +60,22 @@ CREATE TABLE IF NOT EXISTS valoraciones(
   creado TEXT NOT NULL,
   UNIQUE(respuesta_id, consejo)
 );
+-- Quién entra a la página (ver usuarios.py). permisos: secciones separadas por coma.
+CREATE TABLE IF NOT EXISTS perfiles(nombre TEXT PRIMARY KEY, permisos TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS usuarios(
+  usuario TEXT PRIMARY KEY,
+  nombre TEXT NOT NULL,
+  perfil TEXT NOT NULL,
+  clave TEXT NOT NULL,             -- cifrada (PBKDF2), nunca en texto
+  activo INTEGER NOT NULL DEFAULT 1,
+  creado TEXT NOT NULL,
+  ultimo_ingreso TEXT
+);
+INSERT INTO perfiles(nombre, permisos) VALUES
+  ('Administrador', 'hoy,tablero,datos,guia,acciones,admin'),
+  ('Calidad', 'hoy,tablero,datos,guia,acciones'),
+  ('Consulta', 'hoy,tablero,guia')
+ON CONFLICT(nombre) DO NOTHING;
 """
 
 # "Insertar o actualizar" que sirve igual en SQLite y PostgreSQL.

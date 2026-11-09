@@ -82,7 +82,7 @@
       <div class="r-ia" style="background:#eef3fb;padding:8px 10px;margin-top:6px;border-radius:4px">
         <div style="font-weight:600">Consejos (IA)</div>
         <ul style="margin:4px 0 0 18px;padding:0">{% for x in c.ia.consejos %}<li>{{ x }}
-          {% if web %}{% set v = valoraciones.get((c.id, x)) or {} %}
+          {% if web and 'acciones' in (puede or ()) %}{% set v = valoraciones.get((c.id, x)) or {} %}
           <div class="valorar">
             <form method="post" action="/valorar">
               <input type="hidden" name="dia" value="{{ dia }}"><input type="hidden" name="respuesta_id" value="{{ c.id }}">

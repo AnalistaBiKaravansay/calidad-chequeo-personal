@@ -19,5 +19,5 @@ services:
         sync: false
       - key: GEMINI_API_KEY      # clave de Gemini
         sync: false
-      - key: CALIDAD_CLAVE       # clave compartida para entrar a la página
-        sync: false
+      - key: CALIDAD_SECRETO     # firma las sesiones; Render lo inventa solo
+        generateValue: true

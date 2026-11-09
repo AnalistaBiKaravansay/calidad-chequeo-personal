@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block titulo %}Administración{% endblock %}
+{% block contenido %}
+<div class="encabezado">
+  <div>
+    <h1>Administración</h1>
+    <div class="nota">Usuarios que pueden entrar y qué secciones ve cada perfil. Esta pantalla solo la ve el usuario admin.</div>
+  </div>
+</div>
+{% if error %}<div class="mensaje error" role="alert">{{ error }}</div>{% endif %}
+
+<section>
+  <div class="encabezado"><h2>Usuarios <span class="nota">({{ usuarios_|length }})</span></h2></div>
+  <div class="tabla">
+  <table class="admin">
+    <thead><tr><th>Usuario</th><th>Nombre</th><th>Perfil</th><th>Estado</th><th>Último ingreso</th><th></th></tr></thead>
+    <tbody>
+    {% for u in usuarios_ %}
+    {% set fijo = u.usuario == ADMIN %}
+    <tr {% if not u.activo %}class="inactivo"{% endif %}>
+      <td class="sin-salto"><b>{{ u.usuario }}</b>{% if yo and u.usuario == yo.usuario %} <span class="chip">usted</span>{% endif %}</td>
+      <td>{{ u.nombre }}</td>
+      <td class="sin-salto">{{ u.perfil }}</td>
+      <td>{% if u.activo %}<span class="estado activo">Activo</span>{% else %}<span class="estado">Desactivado</span>{% endif %}</td>
+      <td class="sin-salto nota">{{ (u.ultimo_ingreso or 'Nunca')[:16]|replace('T', ' ') }}</td>
+      <td>
+        <details class="editar">
+          <summary class="boton discreto">Editar</summary>
+          <div class="panel-editar">
+            <form method="post" action="/admin/usuario/editar" class="filtros">
+              <input type="hidden" name="usuario" value="{{ u.usuario }}">
+              <label>Nombre <input name="nombre" value="{{ u.nombre }}" maxlength="80"></label>
+              <label>Perfil
+                <select name="perfil" {% if fijo %}disabled{% endif %}>
+                  {% for p in perfiles %}<option {{ 'selected' if p.nombre == u.perfil }}>{{ p.nombre }}</option>{% endfor %}
+                </select>
+                {% if fijo %}<input type="hidden" name="perfil" value="{{ PERFIL_ADMIN }}">{% endif %}
+              </label>
+              <label>Nueva clave <input type="password" name="clave" autocomplete="new-password" placeholder="Dejar vacío = no cambiar" minlength="8"></label>
+              {% if fijo %}<input type="hidden" name="activo" value="1">
+              {% else %}<label class="check"><input type="checkbox" name="activo" value="1" {{ 'checked' if u.activo }}> Activo</label>{% endif %}
+              <button class="principal">Guardar</button>
+            </form>
+            {% if not fijo %}
+            <form method="post" action="/admin/usuario/borrar" onsubmit="return confirm('¿Borrar el usuario {{ u.usuario }}? No se puede deshacer. Si solo quiere quitarle el acceso, desmárquelo como activo.')">
+              <input type="hidden" name="usuario" value="{{ u.usuario }}"><button class="peligro">Borrar usuario</button>
+            </form>
+            {% else %}<p class="nota">El usuario admin no se puede borrar ni desactivar, y siempre tiene todos los permisos.</p>{% endif %}
+          </div>
+        </details>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Crear usuario</h3>
+  <form method="post" action="/admin/usuario/nuevo" class="filtros">
+    <label>Usuario <input name="usuario" required pattern="[a-z0-9._\-]{3,40}" title="3 a 40 letras minúsculas, números, punto o guion, sin espacios ni tildes" placeholder="ej. maria.gomez" autocapitalize="none" spellcheck="false" autocomplete="off"></label>
+    <label>Nombre <input name="nombre" maxlength="80" placeholder="ej. María Gómez"></label>
+    <label>Perfil
+      <select name="perfil" required>
+        {% for p in perfiles %}<option {{ 'selected' if p.nombre == 'Consulta' }}>{{ p.nombre }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Clave inicial <input type="password" name="clave" required minlength="8" autocomplete="new-password" placeholder="Mínimo 8, letras y números"></label>
+    <button class="principal">Crear usuario</button>
+  </form>
+  <p class="nota">Entregue la clave a la persona en privado (no por grupos de chat). Puede cambiarla luego desde Editar.</p>
+</section>
+
+<section>
+  <div class="encabezado"><h2>Perfiles <span class="nota">({{ perfiles|length }})</span></h2></div>
+  <p class="nota">Marque qué secciones ve cada perfil. Los cambios aplican a todos sus usuarios en menos de un minuto.</p>
+  <div class="perfiles">
+    {% for p in perfiles %}
+    {% set fijo = p.nombre == PERFIL_ADMIN %}
+    <form method="post" action="/admin/perfil" class="perfil {{ 'fijo' if fijo }}">
+      <input type="hidden" name="nombre" value="{{ p.nombre }}">
+      <div class="perfil-cabeza"><b>{{ p.nombre }}</b><span class="nota">{{ p.usuarios }} usuario{{ '' if p.usuarios == 1 else 's' }}</span></div>
+      {% for clave, texto in ASIGNABLES.items() %}
+      <label class="check"><input type="checkbox" name="permisos" value="{{ clave }}" {{ 'checked' if clave in p.permisos }} {{ 'disabled' if fijo }}> {{ texto }}</label>
+      {% endfor %}
+      {% if fijo %}<p class="nota">Fijo: todos los permisos. La Administración solo la ve el usuario admin.</p>
+      {% else %}
+      <div class="barra">
+        <button class="principal">Guardar</button>
+        {% if not p.usuarios %}<button formaction="/admin/perfil/borrar" class="peligro" onclick="return confirm('¿Borrar el perfil {{ p.nombre }}?')">Borrar</button>{% endif %}
+      </div>
+      {% endif %}
+    </form>
+    {% endfor %}
+    <form method="post" action="/admin/perfil" class="perfil nuevo">
+      <input type="hidden" name="nuevo" value="1">
+      <div class="perfil-cabeza"><b>Nuevo perfil</b></div>
+      <label class="campo">Nombre <input name="nombre" required maxlength="40" placeholder="ej. Supervisores"></label>
+      {% for clave, texto in ASIGNABLES.items() %}
+      <label class="check"><input type="checkbox" name="permisos" value="{{ clave }}" {{ 'checked' if clave in ('hoy', 'tablero') }}> {{ texto }}</label>
+      {% endfor %}
+      <div class="barra"><button class="principal">Crear perfil</button></div>
+    </form>
+  </div>
+</section>
+{% endblock %}

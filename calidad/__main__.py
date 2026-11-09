@@ -7,9 +7,11 @@
   python -m calidad probar-bd          comprueba la conexión con la base
   python -m calidad subir [--desde RUTA]   copia la base local de la versión anterior a la nube
   python -m calidad compactar          pasa las respuestas guardadas al formato que ocupa menos espacio
+  python -m calidad crear-admin        crea el usuario admin (o le cambia la clave) en la base configurada
 """
 import argparse
 import getpass
+import os
 import threading
 import time
 import urllib.request
@@ -19,7 +21,7 @@ from pathlib import Path
 
 from datetime import datetime
 
-from . import config, datos, diario, reporte
+from . import config, datos, diario, reporte, usuarios
 
 BASE_ANTERIOR = Path.home() / "CalidadKaravansay" / "calidad.db"
 
@@ -46,6 +48,7 @@ def main():
     u = sub.add_parser("subir", help="Copia la base local de la versión anterior a la base configurada.")
     u.add_argument("--desde", default=str(BASE_ANTERIOR))
     sub.add_parser("compactar", help="Pasa las respuestas guardadas al formato compacto y libera el espacio.")
+    sub.add_parser("crear-admin", help="Crea el usuario admin o le cambia la clave.")
     a = p.parse_args()
 
     if a.orden == "diario":
@@ -106,6 +109,16 @@ def main():
                     con.execute(f"VACUUM FULL {tabla}")
                 tamano = con.execute("SELECT pg_size_pretty(pg_database_size(current_database()))").fetchone()[0]
                 print("Tamaño de la base ahora:", tamano)
+    elif a.orden == "crear-admin":
+        # CALIDAD_ADMIN_CLAVE permite hacerlo sin preguntar (por ejemplo desde un script); si no, la pide.
+        clave = os.environ.get("CALIDAD_ADMIN_CLAVE") or getpass.getpass("Clave para el usuario admin (no se mostrará): ")
+        with closing(datos.conectar()) as con:
+            try:
+                usuarios.asegurar_admin(con, clave)
+            except ValueError as e:
+                print(e)
+                return
+        print("Usuario admin listo en", "la nube" if config.url_bd() else "este equipo", "- entre con usuario: admin")
     elif a.orden == "web":
         url = f"http://127.0.0.1:{a.puerto}"
         if _responde(url):
