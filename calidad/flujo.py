@@ -40,8 +40,11 @@ def leer_cuerpo(crudo, encabezados):
     if crudo[:2] == bytes([0x1F, 0x8B]) or "gzip" in encabezados.get("content-encoding", ""):
         crudo = gzip.decompress(crudo)
     if not crudo.strip():
-        raise ValueError(f"Llegó el cuerpo vacío (Content-Type: {encabezados.get('content-type', '-')}). "
-                         "En la acción HTTP, el Body debe ser body('Nombre_de_la_accion_de_Excel').")
+        # Para diagnosticar: nombres de los encabezados recibidos y los de tamaño/tipo (nunca el token).
+        vistos = {k: v for k, v in encabezados.items()
+                  if k.lower() in ("content-type", "content-length", "transfer-encoding", "content-encoding", "expect")}
+        raise ValueError(f"Llegó el cuerpo vacío. Encabezados: {sorted(k.lower() for k in encabezados.keys())}; "
+                         f"{vistos}. En la acción HTTP, el Body debe ser body('Nombre_de_la_accion_de_Excel').")
     try:
         texto = crudo.decode("utf-8-sig")
     except UnicodeDecodeError:
