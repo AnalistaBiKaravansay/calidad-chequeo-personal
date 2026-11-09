@@ -30,6 +30,24 @@ Forms → Power Automate → "Respuestas Forms (flujo).xlsx" en OneDrive
 - **Ficha de persona:** en el buscador del tablero se escribe el nombre **o una parte** ("dayana", "gonzalez"); si coinciden varias personas, se elige de la lista. La ficha muestra chequeos, último chequeo, % sin novedad, días con síntomas (30, 90 y total), y por cada categoría (ETA, síntomas, lesiones, por revisar, BPM, EPP, dotación) **cuántas veces y en qué fechas** tuvo cada novedad (cada fecha abre el reporte de ese día), el mes a mes, las últimas observaciones y el historial completo. Los nombres del reporte y de Datos llevan a esta ficha.
 - **Nombres numerados:** el formulario a veces escribe "12. Dayana Salcedo". La numeración se quita al guardar, así que cada persona aparece una sola vez y sus síntomas repetidos se cuentan juntos (antes 238 nombres, ahora 138). Si un nombre se escribe muy distinto (otra ortografía), sigue apareciendo por separado.
 
+## Entrada directa desde Power Automate (sin PC puente)
+
+El flujo de Forms puede enviar cada respuesta directamente a la página en Render con la acción **HTTP** (Premium). El PC puente puede seguir activo como respaldo: si una respuesta llega por los dos caminos, se guarda una sola vez (misma Id) y la IA no se vuelve a consultar.
+
+**Configurar el flujo** (una vez, cuando la página ya esté en Render):
+1. En Render → el servicio → **Environment**, copiar el valor de `CALIDAD_TOKEN_FLUJO` (lo inventa Render; es la contraseña del flujo, no se comparte).
+2. En el flujo, **después** de "Agregar una fila a una tabla", agregar la acción **HTTP**:
+   - **Método:** `POST`
+   - **URI:** `https://<la-pagina>.onrender.com/api/respuesta`
+   - **Encabezados:** `x-token` = el valor copiado; `Content-Type` = `application/json`
+   - **Cuerpo:** contenido dinámico **body** de "Agregar una fila a una tabla" (o la expresión `body('Agregar_una_fila_a_una_tabla')`, con el nombre exacto de esa acción).
+3. En **Configuración** de la acción HTTP → Directiva de reintentos: *Exponencial*, 4 reintentos, intervalo `PT30S`. Así, si Render estaba dormido (tarda cerca de un minuto en despertar), el flujo reintenta solo.
+4. Enviar un Forms de prueba. En el historial del flujo, la acción HTTP debe responder **200** con `"ok": true`.
+
+Qué hace Render al recibirla: la guarda igual que el puente (mismas columnas del Excel) y, si tiene novedades, pide a la IA los consejos de los casos nuevos de ese día, después de responder al flujo para que este no espere. Respuestas: `401` token incorrecto o `CALIDAD_TOKEN_FLUJO` sin configurar; `400` falta la Id o la fecha. Si la acción HTTP falla, la fila igual queda en el Excel y el puente la sube.
+
+El correo de las 11:00 todavía sale del PC (`diario`).
+
 ## Usuarios, perfiles y Administración
 
 Se entra con **usuario y clave**. Cada usuario tiene un **perfil**, y el perfil dice qué secciones ve; el menú solo muestra esas.
@@ -127,6 +145,7 @@ Configuracion\INSTALAR.cmd                       (instala requirements-dev.txt: 
 | `calidad/ia.py` | Consejos de Gemini por caso (solo los casos nuevos), marcas 👍/👎 |
 | `calidad/guia.py` | Pasos de la guía; `texto_para_ia()` envía solo la parte que aplica |
 | `calidad/web.py` | Página; inicio de sesión y permiso por sección (`PERMISO_DE_RUTA`), Administración (`/admin`); modo nube con `CALIDAD_NUBE=1`; gzip y caché |
+| `calidad/flujo.py` | Entrada `/api/respuesta` para Power Automate: valida el token, limpia la fila del conector, la guarda y pide la IA en segundo plano |
 | `calidad/usuarios.py` | Usuarios y perfiles: claves cifradas, permisos, lista en memoria (se relee cada minuto o al cambiar algo) |
 | `calidad/templates`, `calidad/static` | Diseño con la paleta de Karavansay (igual que Capacitaciones) y el logo. `_graficas.html`: barras en HTML/CSS; `_ficha.html`: ficha de persona |
 | `render.yaml` | Configuración de Render |

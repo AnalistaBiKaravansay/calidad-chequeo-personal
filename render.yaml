@@ -21,3 +21,5 @@ services:
         sync: false
       - key: CALIDAD_SECRETO     # firma las sesiones; Render lo inventa solo
         generateValue: true
+      - key: CALIDAD_TOKEN_FLUJO # contraseña que Power Automate envía en el encabezado x-token; Render la inventa
+        generateValue: true

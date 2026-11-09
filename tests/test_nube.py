@@ -276,3 +276,46 @@ def test_tablero_busca_por_parte_del_nombre_y_muestra_la_ficha(carpeta, monkeypa
 def test_ruta_de_windows_se_respeta_en_el_servidor():
     # Debe quedar igual a la que guardó el PC puente, también cuando la página corre en Linux.
     assert str(config.ruta_excel("C:\\Users\\x\\flujo.xlsx")) == "C:\\Users\\x\\flujo.xlsx"
+
+
+def _como_conector(f):
+    """Así devuelve la fila el conector de Excel de Power Automate: todo texto, vacíos como "", con metadatos."""
+    salida = {"@odata.etag": "", "ItemInternalId": "abc-123"}
+    for k, v in f.items():
+        salida[k] = "" if v is None else (v.isoformat(sep=" ") if hasattr(v, "isoformat") else str(v))
+    return salida
+
+
+def test_flujo_envia_respuestas_directo(carpeta, monkeypatch):
+    llamadas = []
+    monkeypatch.setattr("calidad.flujo.consejos_ia", lambda dias: llamadas.append(dias))
+    c = cliente(monkeypatch, nube=True)
+    nueva = _como_conector(fila(70, obs="", fecha="2026-11-09 08:02:00", **{SALUD["diarrea"]: "SI"},
+                                **{"Correo electrónico": None}))
+
+    monkeypatch.delenv("CALIDAD_TOKEN_FLUJO", raising=False)
+    assert c.post("/api/respuesta", json=nueva, headers={"x-token": ""}).status_code == 401   # entrada apagada
+    monkeypatch.setenv("CALIDAD_TOKEN_FLUJO", "token-de-prueba")
+    assert c.post("/api/respuesta", json=nueva, headers={"x-token": "otro"}).status_code == 401
+    assert c.post("/api/respuesta", json=nueva).status_code == 401
+    assert c.post("/api/respuesta", json={"NOMBRE1": "x"}, headers={"x-token": "token-de-prueba"}).status_code == 400
+
+    r = c.post("/api/respuesta", json=nueva, headers={"x-token": "token-de-prueba"})
+    assert r.status_code == 200 and r.json()["guardadas"] == [{"id": 70, "fecha": "2026-11-09 08:02:00",
+                                                                "novedades": True}]
+    assert llamadas == [["2026-11-09"]]   # la IA se pide después de responder, solo si hay novedades
+    sin_novedad = _como_conector(fila(71, fecha="2026-11-09 08:05:00"))
+    c.post("/api/respuesta", json={"filas": [sin_novedad]}, headers={"x-token": "token-de-prueba"})
+    assert len(llamadas) == 1
+
+    with closing(datos.conectar()) as con:
+        guardada = con.execute("SELECT crudo, novedades, persona FROM respuestas WHERE id=70").fetchone()
+        assert "diarrea" in guardada[1] and guardada[2] == "persona prueba"
+        completa = datos.crudo(con, guardada[0])
+        assert "ItemInternalId" not in completa and "@odata.etag" not in completa
+        assert completa["Correo electrónico"] is None and completa["Id"] == 70
+        # Si después llega la misma respuesta por el PC puente, se actualiza la misma fila: no se duplica.
+        datos.guardar(con, fila(70, fecha="2026-11-09 08:02:00", **{SALUD["diarrea"]: "SI"},
+                                **{"Correo electrónico": None}))
+        con.commit()
+        assert con.execute("SELECT count(*) FROM respuestas").fetchone()[0] == 2

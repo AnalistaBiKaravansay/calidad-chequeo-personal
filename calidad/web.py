@@ -1,8 +1,10 @@
 """Página web: reporte del día, tablero histórico, tabla de datos, guía y administración de usuarios.
 
-En la nube (CALIDAD_NUBE=1) no lee Excel: los datos los sube el PC puente a la base. Se entra con usuario y
+En la nube (CALIDAD_NUBE=1) no lee Excel: los datos los sube el PC puente a la base, o los envía Power
+Automate directamente a /api/respuesta (flujo.py). Se entra con usuario y
 clave; cada usuario ve solo las secciones de su perfil (usuarios.py).
 """
+import asyncio
 import csv
 import hashlib
 import hmac
@@ -14,12 +16,13 @@ from pathlib import Path
 from typing import List, Optional
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit
 
-from fastapi import FastAPI, Form, Request
+from fastapi import BackgroundTasks, FastAPI, Form, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import analisis, config, datos, diario, guia, ia, reglas, reporte, usuarios
+from . import analisis, config, datos, diario, flujo, guia, ia, reglas, reporte, usuarios
 
 ESTATICOS = Path(__file__).parent / "static"
 # Cambia cuando cambian el estilo o el logo: el navegador los guarda un año y los vuelve a pedir solo entonces.
@@ -48,7 +51,7 @@ DURACION_SESION = 30 * 24 * 3600   # 30 días
 PERMISO_DE_RUTA = {"/": "hoy", "/tablero": "tablero", "/persona": "tablero", "/datos": "datos",
                    "/datos.csv": "datos", "/guia": "guia", "/ia": "acciones", "/valorar": "acciones",
                    "/enviar": "acciones", "/admin": "admin"}
-LIBRES = ("/login", "/salud", "/salir")
+LIBRES = ("/login", "/salud", "/salir", "/api/respuesta")   # /api/respuesta se protege con su propio token
 # Orden del menú: (ruta, plantilla, texto, permiso)
 MENU = [("/", "hoy.html", "Reporte del día", "hoy"), ("/tablero", "tablero.html", "Tablero", "tablero"),
         ("/datos", "datos.html", "Datos", "datos"), ("/guia", "guia.html", "Guía", "guia"),
@@ -135,6 +138,23 @@ def salir():
     respuesta = RedirectResponse("/login", status_code=303)
     respuesta.delete_cookie(COOKIE)
     return respuesta
+
+
+@app.post("/api/respuesta")
+async def respuesta_del_flujo(request: Request, tareas: BackgroundTasks):
+    """Power Automate envía aquí cada respuesta del Forms (ver flujo.py). Responde enseguida; los consejos de
+    la IA se piden después, para que el flujo no espere."""
+    if not flujo.token_valido(request.headers.get("x-token")):
+        await asyncio.sleep(1)   # frena los intentos de adivinar el token
+        return JSONResponse({"ok": False, "error": "Token inválido o entrada apagada."}, status_code=401)
+    try:
+        cuerpo = await request.json()
+        resultado, dias_ia = await run_in_threadpool(flujo.recibir, cuerpo)
+    except ValueError as e:   # JSON mal formado, falta Id o fecha: el flujo lo marca como fallido
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+    if dias_ia:
+        tareas.add_task(flujo.consejos_ia, dias_ia)
+    return resultado
 
 
 @app.get("/salud")
