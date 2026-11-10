@@ -121,6 +121,7 @@ Las tareas corren también con el portátil en batería y, si el equipo estaba a
 | `python -m calidad clave-bd` / `clave-ia` | Guarda la dirección de Neon / la clave de Gemini en este PC. |
 | `python -m calidad probar-bd` | Comprueba la conexión. |
 | `python -m calidad subir` | Copia la base de la versión local a la nube. |
+| `python -m calidad recalcular` | Vuelve a aplicar las reglas a todo el histórico, sin IA (después de cambiar `reglas.py`). Solo escribe las respuestas que cambian. |
 | `python -m calidad crear-admin` | Crea el usuario `admin` o le cambia la clave (la pide sin mostrarla). |
 | `python -m calidad compactar` | Pasa respuestas en formato antiguo al compacto, quita la numeración de los nombres y libera el espacio. |
 
@@ -141,7 +142,7 @@ Configuracion\INSTALAR.cmd                       (instala requirements-dev.txt: 
 | `calidad/bd.py` | Conexión: PostgreSQL si hay `DATABASE_URL` o `bd_nube.txt`; si no, SQLite local |
 | `calidad/datos.py` | Lee los Excel, sube solo lo nuevo, formato compacto, firmas locales y memoria de respuestas (`registros`) |
 | `calidad/analisis.py` | Novedades del día, historial, alertas, tablero (`tablero`), búsqueda y ficha de persona (`buscar_personas`, `ficha_persona`), calculados sobre la memoria |
-| `calidad/reglas.py` | Detección de novedades; `limpiar_nombre` quita la numeración de los nombres |
+| `calidad/reglas.py` | Detección de novedades; `limpiar_nombre` quita la numeración de los nombres. N/A nunca es alerta; cordón y estado de las gafas solo cuentan si la persona usa gafas y «CRITERIOS EPP .Gafas» no es N/A |
 | `calidad/ia.py` | Consejos de Gemini por caso (solo los casos nuevos), marcas 👍/👎 |
 | `calidad/guia.py` | Pasos de la guía; `texto_para_ia()` envía solo la parte que aplica |
 | `calidad/web.py` | Página; inicio de sesión y permiso por sección (`PERMISO_DE_RUTA`), Administración (`/admin`); modo nube con `CALIDAD_NUBE=1`; gzip y caché |

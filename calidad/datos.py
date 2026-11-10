@@ -312,11 +312,20 @@ def sincronizar(con, cfg=None, forzar=False):
 def recalcular(con):
     """Vuelve a aplicar reglas.py a todo el histórico (útil si cambian las reglas)."""
     global _escrituras
-    cambios = [(_compacto(reglas.novedades(crudo(con, r["crudo"]))), r["id"])
-               for r in con.execute("SELECT id, crudo FROM respuestas").fetchall()]
+    cambios = []
+    for r in con.execute("SELECT id, crudo, novedades FROM respuestas").fetchall():
+        nuevas = _compacto(reglas.novedades(crudo(con, r["crudo"])))
+        if nuevas != r["novedades"]:   # solo se escriben las que cambian (menos tráfico con la nube)
+            cambios.append((nuevas, r["id"]))
     with con:
         con.executemany("UPDATE respuestas SET novedades=? WHERE id=?", cambios)
+        if cambios:
+            # La página en Render guarda las respuestas en memoria y las relee cuando cambia la última subida:
+            # se marca como subida ahora para que muestre las novedades recalculadas.
+            con.execute("UPDATE fuentes SET revisado=? WHERE revisado=(SELECT max(revisado) FROM fuentes)",
+                        (datetime.now().isoformat(timespec="seconds"),))
     _escrituras += 1
+    return len(cambios)
 
 
 def compactar(con):

@@ -195,3 +195,19 @@ def test_ia_valida_respuesta():
     entrada = [{"codigo": "C1"}]
     datos_ia = {"resumen_dia": "ok", "casos": [{"codigo": "C1", "consejos": ["a", "b"]}, {"codigo": "C9", "consejos": ["x"]}]}
     assert ia.validar(datos_ia, entrada)["casos"] == {"C1": {"consejos": ["a", "b"], "atencion": ""}}
+
+
+def test_no_aplica_nunca_es_alerta():
+    # EPP y BPM con N/A no generan alerta.
+    assert claves(fila(**{"CRITERIOS EPP .Tapaoídos": "N/A", "CRITERIOS EPP .Gafas": "N/A",
+                          "Criterios BPM.No usa pestañas postizas": "N/A"})) == {}
+    # Usa gafas y no tiene cordón, pero el EPP de gafas no aplica en su puesto: sin alerta.
+    assert claves(fila(**{"GAFAS.Usa gafas": "SI", "GAFAS.Tiene cordón para las gafas": "NO",
+                          "CRITERIOS EPP .Gafas": "N/A"})) == {}
+    # Si el EPP de gafas sí aplica, el cordón cuenta.
+    assert claves(fila(**{"GAFAS.Usa gafas": "SI", "GAFAS.Tiene cordón para las gafas": "NO",
+                          "CRITERIOS EPP .Gafas": "SI"})) == {"epp:gafas_cordon": "epp"}
+    # No usa gafas: nada del bloque GAFAS es alerta.
+    assert claves(fila(**{"GAFAS.Usa gafas": "NO", "GAFAS.Tiene cordón para las gafas": "NO",
+                          "GAFAS.Las gafas se encuentran en buen estado (sin rotos, tornillos completos)": "NO",
+                          "CRITERIOS EPP .Gafas": "SI"})) == {}

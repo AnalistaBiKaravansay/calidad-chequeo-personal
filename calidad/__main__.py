@@ -7,6 +7,7 @@
   python -m calidad probar-bd          comprueba la conexión con la base
   python -m calidad subir [--desde RUTA]   copia la base local de la versión anterior a la nube
   python -m calidad compactar          pasa las respuestas guardadas al formato que ocupa menos espacio
+  python -m calidad recalcular         vuelve a aplicar las reglas a todo el histórico (sin IA)
   python -m calidad crear-admin        crea el usuario admin (o le cambia la clave) en la base configurada
 """
 import argparse
@@ -49,6 +50,7 @@ def main():
     u.add_argument("--desde", default=str(BASE_ANTERIOR))
     sub.add_parser("compactar", help="Pasa las respuestas guardadas al formato compacto y libera el espacio.")
     sub.add_parser("crear-admin", help="Crea el usuario admin o le cambia la clave.")
+    sub.add_parser("recalcular", help="Vuelve a aplicar las reglas a todo el histórico (sin IA).")
     a = p.parse_args()
 
     if a.orden == "diario":
@@ -63,7 +65,7 @@ def main():
             for f in estado:
                 print(f)
             if a.todo:
-                datos.recalcular(con)
+                print("Novedades recalculadas:", datos.recalcular(con))
             print("Respuestas en la base:", con.execute("SELECT count(*) FROM respuestas").fetchone()[0])
             if a.ia and any(f.get("guardadas") for f in estado):
                 # Consulta automática: solo se envían a la IA los casos que todavía no tienen consejo.
@@ -109,6 +111,9 @@ def main():
                     con.execute(f"VACUUM FULL {tabla}")
                 tamano = con.execute("SELECT pg_size_pretty(pg_database_size(current_database()))").fetchone()[0]
                 print("Tamaño de la base ahora:", tamano)
+    elif a.orden == "recalcular":
+        with closing(datos.conectar()) as con:
+            print("Respuestas con novedades distintas, actualizadas:", datos.recalcular(con))
     elif a.orden == "crear-admin":
         # CALIDAD_ADMIN_CLAVE permite hacerlo sin preguntar (por ejemplo desde un script); si no, la pide.
         clave = os.environ.get("CALIDAD_ADMIN_CLAVE") or getpass.getpass("Clave para el usuario admin (no se mostrará): ")

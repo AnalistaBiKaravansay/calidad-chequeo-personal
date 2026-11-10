@@ -164,6 +164,11 @@ def analizar_observacion(texto):
     return encontradas
 
 
+# Respuestas que significan "no aplica": nunca generan alerta (las alertas de EPP solo salen con "NO" y las de
+# BPM con "No cumple").
+NO_APLICA = {"N/A", "NA", "N.A", "N.A.", "N/A.", "NO APLICA"}
+
+
 def novedades(fila):
     """fila: dict encabezado -> valor. Devuelve lista de novedades ordenada por prioridad."""
     lista = {}
@@ -175,8 +180,11 @@ def novedades(fila):
         lista[clave] = {"tipo": tipo, "clave": clave, "etiqueta": etiqueta or ETIQUETAS.get(clave, clave), "origen": origen}
 
     usa_gafas = False
+    gafas_no_aplica = False
     for encabezado, valor in fila.items():
         h, v = normalizar(encabezado), _limpio(valor).upper()
+        if h.startswith("criterios epp") and h.endswith(".gafas") and v in NO_APLICA:
+            gafas_no_aplica = True
         if h.startswith("criterios estado de salud.") and v in ("SI", "SÍ"):
             for palabra, clave in PREGUNTAS_SALUD:
                 if palabra in h:
@@ -189,7 +197,9 @@ def novedades(fila):
             agregar("epp", "epp:" + elemento, "pregunta", "No usa: " + elemento)
         elif h == "gafas.usa gafas" and v == "SI":
             usa_gafas = True
-    if usa_gafas:
+    # Cordón y estado de las gafas solo cuentan si la persona usa gafas y el EPP de gafas aplica en su puesto.
+    # Con "Usa gafas" = NO (no tiene gafas) o "CRITERIOS EPP .Gafas" = N/A no hay alerta.
+    if usa_gafas and not gafas_no_aplica:
         for encabezado, valor in fila.items():
             h, v = normalizar(encabezado), _limpio(valor).upper()
             if h.startswith("gafas.tiene cordon") and v == "NO":
