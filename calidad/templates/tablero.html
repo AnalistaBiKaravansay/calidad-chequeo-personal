@@ -8,15 +8,20 @@
     <div class="nota">Datos hasta el {{ hasta|fecha_larga }}{% if lugar and not ficha %} · {{ lugar }}{% endif %}</div>
   </div>
   <form method="get" class="barra" action="/tablero">
+    {% if not ficha %}
+    <select name="mes" onchange="this.form.submit()" aria-label="Mes">
+      {% for x in meses %}<option value="{{ x }}" {{ 'selected' if x == ind.mes }}>{{ x|nombre_mes|capitalize }}</option>{% endfor %}
+    </select>
+    {% endif %}
     <select name="lugar" onchange="this.form.submit()" aria-label="Lugar">
       <option value="">Todos los lugares</option>
       {% for l in lista_lugares %}<option {{ 'selected' if l == lugar }}>{{ l }}</option>{% endfor %}
     </select>
     <input type="search" name="persona" list="personas" value="{{ persona }}" placeholder="Buscar persona (nombre o parte)…"
-           style="min-width:240px" aria-label="Buscar persona">
+           style="min-width:220px" aria-label="Buscar persona">
     <datalist id="personas">{% for p in lista_personas %}<option value="{{ p }}">{% endfor %}</datalist>
     <button class="principal">Ver</button>
-    {% if lugar or persona %}<a class="boton discreto" href="/tablero">Quitar filtros</a>{% endif %}
+    {% if lugar or persona or request.query_params.get('mes') %}<a class="boton discreto" href="/tablero">Quitar filtros</a>{% endif %}
   </form>
 </div>
 
@@ -31,44 +36,104 @@
 {% if ficha %}
   {% include "_ficha.html" %}
 {% else %}
+{% set a = ind.ahora %}
+{% set en_curso = ind.mes == hasta[:7] %}
+{% set seccion_mes = ind.mes|nombre_mes|capitalize %}
 
-<div class="kpis">
-  {% for k in kpis %}
-  {% set dif = k.valor - k.antes %}
-  <div class="kpi">
-    <div class="kpi-titulo">{{ k.titulo }}</div>
-    <div class="kpi-valor">{{ k.valor }}</div>
+{# ---------------- Fila 1: volumen del mes ---------------- #}
+<div class="dash-cabeza">
+  <h2>{{ seccion_mes }} <span class="nota">· {{ 'acumulado al ' ~ (fin[8:10]|int) if en_curso else 'mes completo' }} · comparado con {{ ind.mes_antes|nombre_mes }}</span></h2>
+</div>
+<div class="kpis kpis-volumen">
+  <div class="kpi"><div class="kpi-titulo">Chequeos</div><div class="kpi-valor">{{ a.chequeos }}</div>
+    <div class="kpi-pie"><span>{{ a.personas }} personas</span></div></div>
+  <div class="kpi"><div class="kpi-titulo">Días con chequeo</div><div class="kpi-valor">{{ a.dias }}</div>
+    <div class="kpi-pie"><span>{{ a.por_dia }} chequeos por día</span></div></div>
+  <div class="kpi"><div class="kpi-titulo">Mes anterior</div><div class="kpi-valor">{{ ind.antes.chequeos }}</div>
+    <div class="kpi-pie"><span>chequeos en {{ ind.mes_antes|nombre_mes }}</span><span>{{ ind.antes.dias }} días con chequeo</span></div></div>
+</div>
+
+{# ---------------- Fila 2: indicadores en % con su tendencia de 12 meses ---------------- #}
+<div class="kpis kpis-indicadores">
+  {% for t in ind.tarjetas %}
+  <div class="kpi {{ 'kpi-bueno' if t.clave == 'sin_novedad' }}">
+    <div class="kpi-titulo">{{ t.titulo }}</div>
+    <div class="kpi-valor">{{ t.pct }}%</div>
     <div class="kpi-pie">
-      {% if k.pct is not none %}<span>{{ k.pct }}% de los chequeos</span>{% elif k.personas %}<span>{{ k.personas }} personas</span>{% endif %}
-      {% if dif %}
-      <span class="{{ ('peor' if dif > 0 else 'mejor') if k.malo_si_sube }}" title="{{ k.antes }} en los 30 días anteriores">{{ '▲' if dif > 0 else '▼' }} {{ dif|abs }} vs. 30 días antes</span>
-      {% else %}<span title="{{ k.antes }} en los 30 días anteriores">= igual que 30 días antes</span>{% endif %}
+      <span>{{ t.valor }} de {{ a.chequeos }} chequeos</span>
+      {% if t.dif is none %}<span>sin datos del mes anterior</span>
+      {% elif t.dif == 0 %}<span>= igual que {{ ind.mes_antes|nombre_mes(true) }}</span>
+      {% else %}<span class="{{ t.estado }}" title="{{ t.pct_antes }}% en {{ ind.mes_antes|nombre_mes }}">{{ '▲' if t.dif > 0 else '▼' }} {{ t.dif|abs }} pts vs. {{ ind.mes_antes|nombre_mes(true) }} ({{ t.pct_antes }}%)</span>{% endif %}
     </div>
+    {{ g.columnas_mes(t.serie, ind.mes, nombre=t.titulo) }}
   </div>
   {% endfor %}
 </div>
-<p class="nota">Últimos 30 días frente a los 30 anteriores. Cada chequeo cuenta una vez por indicador.</p>
+<p class="nota">% de los chequeos del mes con cada novedad (cada chequeo cuenta una vez por indicador). «pts» = puntos porcentuales.
+  Verde mejora, rojo empeora. Las columnas muestran los últimos 12 meses; resaltado, el mes elegido.</p>
 
+{# ---------------- Fila 3: volumen por mes + mes por lugar ---------------- #}
+<div class="columnas">
+  <section>
+    <h2>Chequeos por mes <span class="nota">· últimos 12 meses</span></h2>
+    {% set serie_chequeos = [] %}{% for h in ind.historia %}{% set _ = serie_chequeos.append((h.mes, h.chequeos, h.chequeos, h.chequeos)) %}{% endfor %}
+    {{ g.columnas_mes(serie_chequeos, ind.mes, sufijo='', alto=150, etiquetas=true, nombre='Chequeos') }}
+  </section>
+  <section>
+    <h2>{{ seccion_mes }} por lugar</h2>
+    {% if ind.lugares %}
+    <div class="tabla"><table>
+      <tr><th>Lugar</th><th class="num">Chequeos</th><th class="num">Sin novedad</th><th class="num">Síntomas</th><th class="num">BPM</th><th class="num">EPP</th><th class="num">Dotación</th></tr>
+      {% for l in ind.lugares %}<tr><td class="sin-salto">{{ l.lugar }}</td><td class="num">{{ l.chequeos }}</td>
+        {% for c in ['sin_novedad', 'salud', 'bpm', 'epp', 'dotacion'] %}<td class="num" title="{{ l[c] }} de {{ l.chequeos }} chequeos">{{ l[c ~ '_pct']|round|int }}%</td>{% endfor %}</tr>{% endfor %}
+    </table></div>
+    <p class="nota">% de los chequeos de cada lugar en el mes.</p>
+    {% else %}<p class="nota">Sin chequeos este mes.</p>{% endif %}
+  </section>
+</div>
+
+{# ---------------- Fila 4: tabla mensual ---------------- #}
 <section>
-  <h2>Síntomas por semana <span class="nota">· últimas 12 semanas</span></h2>
-  <p class="nota">Un salto frente a las semanas anteriores merece revisión. En rojo, 5 o más casos en la semana.</p>
-  <div class="tabla"><table>
-    <tr><th>Semana del</th><th class="num">Chequeos</th>{% for gr in grupos %}<th>{{ gr|capitalize }}</th>{% endfor %}</tr>
-    {% for s in semanas %}
-    <tr><td class="sin-salto">{{ s.semana }}</td><td class="num">{{ s.chequeos }}</td>
-      {% for gr in grupos %}{% set v = s[gr] or 0 %}<td class="sin-salto {{ 'alto' if v >= 5 }}">{{ g.barra(v, 15, v ~ ' casos ' ~ gr ~ ', semana del ' ~ s.semana, 80) }} {{ v }}</td>{% endfor %}
+  <h2>Indicadores mensuales <span class="nota">· % de los chequeos de cada mes</span></h2>
+  {% set hist = ind.historia|reverse|list %}
+  <div class="tabla"><table class="meses">
+    <tr><th>Mes</th><th class="num">Chequeos</th><th class="num">Personas</th><th class="num">Días</th>{% for c, t in ind.columnas %}<th class="num">{{ t }}</th>{% endfor %}</tr>
+    {% for f in hist %}{% set previo = hist[loop.index] if not loop.last else none %}
+    <tr {% if f.mes == ind.mes %}class="actual"{% endif %}>
+      <td class="sin-salto"><a href="/tablero?mes={{ f.mes }}{{ '&lugar=' ~ lugar|urlencode if lugar }}">{{ f.mes|nombre_mes|capitalize }}</a>{% if f.mes == hasta[:7] %} <span class="nota">(al {{ hasta[8:10]|int }})</span>{% endif %}</td>
+      <td class="num">{{ f.chequeos }}</td><td class="num">{{ f.personas }}</td><td class="num">{{ f.dias }}</td>
+      {% for c, t in ind.columnas %}{% set p = f[c ~ '_pct'] %}
+      <td class="num sin-salto" title="{{ f[c] }} de {{ f.chequeos }} chequeos">{{ p }}%{% if previo %}{% set d = (p - previo[c ~ '_pct'])|round(1) %}{% if d %} <span class="dif {{ ('mejor' if d > 0 else 'peor') if c == 'sin_novedad' else ('peor' if d > 0 else 'mejor') }}" title="{{ '+' if d > 0 }}{{ d }} pts frente al mes anterior">{{ '▲' if d > 0 else '▼' }}</span>{% endif %}{% endif %}</td>
+      {% endfor %}
     </tr>
     {% endfor %}
   </table></div>
+  <p class="nota">La flecha compara con el mes anterior: verde mejora, rojo empeora. Clic en un mes para ver sus indicadores arriba.</p>
 </section>
 
-<div class="columnas">
-  <section><h2>Síntomas y lesiones más reportados <span class="nota">· 90 días</span></h2>{{ g.ranking(sintomas, 'Sin síntomas reportados.') }}</section>
+{# ---------------- Fila 5: síntomas por semana ---------------- #}
+<section>
+    <h2>Síntomas por semana <span class="nota">· últimas 12 semanas</span></h2>
+    <div class="tabla"><table>
+      <tr><th>Semana del</th><th class="num">Chequeos</th>{% for gr in grupos %}<th>{{ gr|capitalize }}</th>{% endfor %}</tr>
+      {% for s in semanas %}
+      <tr><td class="sin-salto">{{ s.semana }}</td><td class="num">{{ s.chequeos }}</td>
+        {% for gr in grupos %}{% set v = s[gr] or 0 %}<td class="sin-salto {{ 'alto' if v >= 5 }}">{{ g.barra(v, 15, v ~ ' casos ' ~ gr ~ ', semana del ' ~ s.semana, 120) }} {{ v }}</td>{% endfor %}
+      </tr>
+      {% endfor %}
+    </table></div>
+    <p class="nota">Un salto frente a las semanas anteriores merece revisión. En rojo, 5 o más casos en la semana.</p>
+</section>
+
+{# ---------------- Fila 6: qué se repite ---------------- #}
+<div class="columnas columnas-4">
+  <section><h2>Síntomas y lesiones <span class="nota">· 90 días</span></h2>{{ g.ranking(sintomas, 'Sin síntomas reportados.') }}</section>
   <section><h2>Criterios BPM incumplidos <span class="nota">· 90 días</span></h2>{{ g.ranking(bpm, 'Sin incumplimientos BPM.') }}</section>
   <section><h2>EPP no usado <span class="nota">· 90 días</span></h2>{{ g.ranking(epp, 'Sin novedades de EPP.') }}</section>
   <section><h2>Dotación <span class="nota">· 90 días</span></h2>{{ g.ranking(dotacion, 'Sin novedades de dotación.') }}</section>
 </div>
 
+{# ---------------- Fila 7: personas y responsables ---------------- #}
 <div class="columnas">
   <section>
     <h2>Síntomas repetidos <span class="nota">· 30 días</span></h2>
@@ -92,17 +157,7 @@
   </section>
 </div>
 
-<div class="columnas">
-  <section>
-    <h2>Por lugar <span class="nota">· 90 días</span></h2>
-    <div class="tabla"><table>
-      <tr><th>Lugar</th><th class="num">Chequeos</th><th class="num">Síntomas</th><th class="num">BPM</th><th class="num">EPP</th></tr>
-      {% for l in lugares %}<tr><td>{{ l.lugar }}</td><td class="num">{{ l.chequeos }}</td>
-        {% for c in ['salud', 'bpm', 'epp'] %}<td class="num" title="{{ l[c] }} de {{ l.chequeos }} chequeos">{{ (100 * l[c] / l.chequeos)|round|int }}%</td>{% endfor %}</tr>{% endfor %}
-    </table></div>
-    <p class="nota">Porcentaje de chequeos con al menos una novedad de ese tipo.</p>
-  </section>
-  <section>
+<section>
     <h2>Quién hace los chequeos <span class="nota">· 90 días</span></h2>
     <div class="tabla"><table>
       <tr><th>Responsable</th><th class="num">Chequeos</th><th class="num">Con novedad</th><th class="num">Síntomas</th></tr>
@@ -110,12 +165,25 @@
         <td class="num">{{ (100 * r.con_novedad / r.chequeos)|round|int }}%</td><td class="num">{{ (100 * r.salud / r.chequeos)|round|int }}%</td></tr>{% endfor %}
     </table></div>
     <p class="nota">Si un responsable casi nunca registra novedades, conviene revisar cómo hace el chequeo.</p>
-  </section>
-</div>
-
-<section>
-  <h2>Evolución mensual</h2>
-  {{ g.meses(por_mes, [('sin_novedad', 'Sin novedad'), ('eta', 'ETA'), ('salud', 'Síntomas'), ('bpm', 'BPM'), ('epp', 'EPP'), ('dotacion', 'Dotación')]) }}
 </section>
+
+<div class="globo" id="globo" role="tooltip" hidden></div>
+<script>
+(function () {
+  var globo = document.getElementById('globo');
+  function mostrar(e) {
+    var c = e.target.closest && e.target.closest('[data-tip]');
+    if (!c) { globo.hidden = true; return; }
+    globo.textContent = c.dataset.tip; globo.hidden = false;
+    var r = c.getBoundingClientRect(), g = globo.getBoundingClientRect();
+    var x = Math.min(Math.max(8, r.left + r.width / 2 - g.width / 2), innerWidth - g.width - 8);
+    var y = r.top - g.height - 8; if (y < 8) y = r.bottom + 8;
+    globo.style.left = x + 'px'; globo.style.top = y + 'px';
+  }
+  document.addEventListener('mouseover', mostrar);
+  document.addEventListener('focusin', mostrar);
+  document.addEventListener('scroll', function () { globo.hidden = true; }, true);
+})();
+</script>
 {% endif %}
 {% endblock %}

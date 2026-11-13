@@ -229,16 +229,24 @@ def enviar(dia: str = Form(...)):
 
 
 @app.get("/tablero")
-def tablero(request: Request, lugar: str = "", persona: str = ""):
-    """Tablero de la planta; con 'persona' (nombre completo o parte), la ficha de esa persona."""
+def tablero(request: Request, lugar: str = "", persona: str = "", mes: str = ""):
+    """Tablero de la planta (indicadores de un mes, evolución y detalle); con 'persona' (nombre completo o
+    parte), la ficha de esa persona."""
     persona = persona.strip()
     with closing(conexion()) as con:
         hasta = _ultimo_dia(con)
+        meses = sorted({d[:7] for d in datos.registros(con).dias}, reverse=True)
+        mes = mes if mes in meses else hasta[:7]
+        # Último día del mes elegido (o el último con datos, si es el mes en curso).
+        siguiente = (date.fromisoformat(mes + "-28") + timedelta(days=4)).replace(day=1)
+        fin = hasta if mes == hasta[:7] else (siguiente - timedelta(days=1)).isoformat()
         coincidencias = analisis.buscar_personas(con, persona) if persona else []
         ficha = analisis.ficha_persona(con, coincidencias[0][0], hasta) if len(coincidencias) == 1 else None
         cifras = analisis.tablero(con, hasta, lugar)
+        indicadores = analisis.indicadores_mes(con, fin, 12, lugar)
     return pagina("tablero.html", request, hasta=hasta, lugar=lugar, persona=persona, ficha=ficha,
-                  coincidencias=coincidencias, CATEGORIAS=analisis.CATEGORIAS, **cifras)
+                  coincidencias=coincidencias, CATEGORIAS=analisis.CATEGORIAS, meses=meses, fin=fin,
+                  ind=indicadores, **cifras)
 
 
 @app.get("/persona/{clave}")

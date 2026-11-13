@@ -160,6 +160,26 @@ table.meses tr.actual td { background: var(--amarillo-suave); font-weight: 600; 
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .pie-reporte { margin-top: 1.5rem; border-top: 1px solid var(--borde); padding-top: .6rem; font-size: .78rem; }
 
+/* Tablero (dashboard): tarjetas con tendencia mensual, columnas por mes y globo de datos */
+.dash-cabeza h2 { font-size: 1.05rem; margin: 0 0 .6rem; }
+.kpis-volumen { grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); margin-bottom: .75rem; }
+.kpis-indicadores { grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); }
+.kpis-indicadores .kpi-pie { min-height: 2.4rem; }
+.cols { display: flex; align-items: flex-end; gap: 2px; height: var(--alto); margin-top: .55rem; border-bottom: 1px solid var(--borde); }
+.cols .col { flex: 1 1 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; cursor: default; position: relative; }
+.cols .col i { display: block; width: 100%; max-width: 24px; min-height: 1px; background: var(--borde-fuerte); border-radius: 3px 3px 0 0; }
+.cols .col:hover i { background: var(--barra); }
+.cols .col.actual i { background: var(--amarillo-osc); }
+.cols .col em { font-style: normal; font-size: .75rem; font-weight: 650; color: var(--texto); margin-bottom: 2px; font-variant-numeric: tabular-nums; }
+.cols-grande .col i { background: var(--barra); }
+.cols-grande .col:hover i { background: var(--texto); }
+.cols-ejes { display: flex; gap: 2px; font-size: .68rem; color: var(--suave); margin-top: .2rem; }
+.cols-ejes span { flex: 1 1 0; text-align: center; white-space: nowrap; overflow: hidden; }
+.cols-ejes.chico { justify-content: space-between; }
+.cols-ejes.chico span { flex: 0 0 auto; }
+.columnas-4 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+.globo { position: fixed; z-index: 50; pointer-events: none; background: var(--texto); color: #fff; font-size: .78rem; padding: .3rem .55rem; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.18); white-space: nowrap; }
+
 /* Marcas de Calidad sobre los consejos de la IA */
 .valorar { display: flex; flex-wrap: wrap; gap: .4rem; align-items: flex-start; margin: .25rem 0 .6rem; font-size: .8rem; }
 .valorar form { margin: 0; display: flex; gap: .3rem; align-items: flex-start; }

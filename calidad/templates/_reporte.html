@@ -68,11 +68,6 @@
 {% endif %}
 {%- endmacro %}
 
-{% macro flecha(t) -%}
-{% if t.dif is none %}<span>sin datos de {{ m.mes_antes|nombre_mes(true) }}</span>
-{% elif t.dif == 0 %}<span>= igual que {{ m.mes_antes|nombre_mes(true) }}</span>
-{% else %}<span class="{{ t.estado }}" title="{{ t.pct_antes }}% en {{ m.mes_antes|nombre_mes }}">{{ '▲' if t.dif > 0 else '▼' }} {{ t.dif|abs }} pts vs. {{ m.mes_antes|nombre_mes(true) }} ({{ t.pct_antes }}%)</span>{% endif %}
-{%- endmacro %}
 
 {% if web %}
 {# ---------------------------------- PÁGINA ---------------------------------- #}
@@ -92,17 +87,7 @@
   {% endfor %}
 </div>
 
-<h2 class="kpis-titulo">{{ m.mes|nombre_mes|capitalize }} <span class="nota">· acumulado al {{ dia[8:10]|int }} · {{ m.ahora.chequeos }} chequeos, {{ m.ahora.personas }} personas, {{ m.ahora.dias }} días con chequeo</span></h2>
-<div class="kpis">
-  {% for t in m.tarjetas %}
-  <div class="kpi {{ 'kpi-bueno' if t.clave == 'sin_novedad' }}">
-    <div class="kpi-titulo">{{ t.titulo }}</div>
-    <div class="kpi-valor">{{ t.pct }}%</div>
-    <div class="kpi-pie"><span>{{ t.valor }} de {{ m.ahora.chequeos }} chequeos</span>{{ flecha(t) }}</div>
-  </div>
-  {% endfor %}
-</div>
-<p class="nota">Porcentaje de chequeos del mes con cada novedad, frente al mes anterior completo. «pts» = puntos porcentuales.</p>
+<p class="nota">Indicadores del mes y su evolución: <a href="/tablero?mes={{ dia[:7] }}">ver el tablero</a>.</p>
 
 {% if ia.resumen_dia %}
 <div class="r-ia" style="border-left:4px solid #b8a015;background:#fdf8e7;padding:10px 12px;margin:1rem 0">
@@ -170,23 +155,6 @@
   </table></div>
 </section>
 {% endif %}
-
-<section>
-  <h2>Indicadores mensuales <span class="nota">· % de los chequeos de cada mes · <a href="/tablero">ver más en el tablero</a></span></h2>
-  {% set hist = m.historia|reverse|list %}
-  <div class="tabla"><table class="meses">
-    <tr><th>Mes</th><th class="num">Chequeos</th><th class="num">Personas</th><th class="num">Días</th>{% for c, t in m.columnas %}<th class="num">{{ t }}</th>{% endfor %}</tr>
-    {% for f in hist %}{% set previo = hist[loop.index] if not loop.last else none %}
-    <tr {% if f.mes == m.mes %}class="actual"{% endif %}><td class="sin-salto">{{ f.mes|nombre_mes|capitalize }}{% if f.mes == m.mes %} <span class="nota">(al {{ dia[8:10]|int }})</span>{% endif %}</td>
-      <td class="num">{{ f.chequeos }}</td><td class="num">{{ f.personas }}</td><td class="num">{{ f.dias }}</td>
-      {% for c, t in m.columnas %}{% set p = f[c ~ '_pct'] %}
-      <td class="num sin-salto" title="{{ f[c] }} de {{ f.chequeos }} chequeos">{{ p }}%{% if previo %}{% set d = (p - previo[c ~ '_pct'])|round(1) %}{% if d %} <span class="dif {{ ('mejor' if d > 0 else 'peor') if c == 'sin_novedad' else ('peor' if d > 0 else 'mejor') }}" title="{{ '+' if d > 0 }}{{ d }} pts frente al mes anterior">{{ '▲' if d > 0 else '▼' }}</span>{% endif %}{% endif %}</td>
-      {% endfor %}
-    </tr>
-    {% endfor %}
-  </table></div>
-  <p class="nota">Cada chequeo cuenta una vez por indicador. La flecha compara con el mes anterior: verde mejora, rojo empeora.</p>
-</section>
 
 <p class="nota pie-reporte">{{ AVISO }} Fuentes: {% for k, v in FUENTES.items() %}[{{ k }}] {{ v }}{{ '; ' if not loop.last }}{% endfor %}.
   {% if ia.modelo %}Consejos generados con {{ ia.modelo }} sin enviar nombres.{% endif %}</p>

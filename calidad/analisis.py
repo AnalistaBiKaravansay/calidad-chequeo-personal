@@ -218,15 +218,16 @@ def _pct(parte, total):
     return round(100 * parte / total, 1) if total else 0.0
 
 
-def indicadores_mes(con, dia, meses_atras=6):
+def indicadores_mes(con, dia, meses_atras=6, lugar=""):
     """Indicadores del mes del día (hasta ese día) frente al mes anterior completo, en % de los chequeos,
-    y la evolución de los últimos meses. Los meses tienen distinto número de chequeos: se comparan porcentajes."""
+    la evolución de los últimos meses y el mes por lugar. Los meses tienen distinto número de chequeos:
+    se comparan porcentajes."""
     mes = dia[:7]
     primero = _dia(mes + "-01")
     mes_antes = (primero - timedelta(days=1)).isoformat()[:7]
     por_mes = defaultdict(list)
     for r in registros(con):
-        if r["dia"] <= dia:
+        if r["dia"] <= dia and (not lugar or r["lugar"] == lugar):
             por_mes[r["dia"][:7]].append(r)
     indicadores = [SIN_NOVEDAD] + INDICADORES[1:]
 
@@ -247,8 +248,15 @@ def indicadores_mes(con, dia, meses_atras=6):
                          "pct_antes": antes[clave + "_pct"], "dif": dif,
                          "estado": None if not dif else ("peor" if (dif > 0) == malo else "mejor")})
     historia = [{"mes": m, **cifras(por_mes[m])} for m in sorted(por_mes)[-meses_atras:]]
+    for t in tarjetas:
+        t["serie"] = [(h["mes"], h[t["clave"] + "_pct"], h[t["clave"]], h["chequeos"]) for h in historia]
+    del_lugar = defaultdict(list)
+    for r in por_mes.get(mes, []):
+        del_lugar[r["lugar"]].append(r)
+    lugares = sorted(({"lugar": k, **cifras(v)} for k, v in del_lugar.items()), key=lambda x: -x["chequeos"])
+    ahora["por_dia"] = round(ahora["chequeos"] / ahora["dias"], 1) if ahora["dias"] else 0
     return {"mes": mes, "mes_antes": mes_antes, "ahora": ahora, "antes": antes, "tarjetas": tarjetas,
-            "historia": historia, "columnas": [(c, t) for c, t, _, _ in indicadores]}
+            "historia": historia, "lugares": lugares, "columnas": [(c, t) for c, t, _, _ in indicadores]}
 
 
 def tablero(con, hasta, lugar=""):

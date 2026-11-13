@@ -30,3 +30,22 @@
   {% endfor %}
 </table></div>
 {%- endmacro %}
+
+
+{# Columnas por mes (una sola serie, un solo color); el mes elegido resaltado. serie = [(mes, valor, n, total)].
+   Cada columna lleva su dato en data-tip (globo al pasar el mouse) y en aria-label. #}
+{% macro columnas_mes(serie, actual, sufijo='%', alto=44, etiquetas=false, nombre='') -%}
+{% set m = serie|map(attribute=1)|max if serie else 0 %}
+<div class="cols {{ 'cols-grande' if etiquetas }}" style="--alto:{{ alto }}px" role="img"
+     aria-label="{{ nombre }} por mes: {% for x in serie %}{{ x[0] }} {{ x[1] }}{{ sufijo }}{{ ', ' if not loop.last }}{% endfor %}">
+  {% for mes, v, n, total in serie %}
+  <span class="col {{ 'actual' if mes == actual }}" tabindex="-1"
+        data-tip="{{ mes|nombre_mes|capitalize }}: {{ v }}{{ sufijo }}{% if sufijo == '%' %} ({{ n }} de {{ total }} chequeos){% endif %}">
+    {% if etiquetas and (mes == actual or loop.last) %}<em>{{ v }}{{ sufijo if sufijo != '%' else '%' }}</em>{% endif %}
+    <i style="height:{{ ((100 * v / m) if m else 0)|round(1) }}%"></i>
+  </span>
+  {% endfor %}
+</div>
+{% if etiquetas %}<div class="cols-ejes">{% for x in serie %}<span title="{{ x[0]|nombre_mes }}">{{ (x[0]|nombre_mes(true))[:3] }}{% if x[0][5:] == '01' or loop.first %}<br>{{ x[0][:4] }}{% endif %}</span>{% endfor %}</div>
+{% else %}<div class="cols-ejes chico"><span>{{ serie[0][0]|nombre_mes(true) if serie }}</span><span>{{ serie[-1][0]|nombre_mes(true) if serie }}</span></div>{% endif %}
+{%- endmacro %}
