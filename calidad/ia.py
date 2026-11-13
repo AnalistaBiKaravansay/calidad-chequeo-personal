@@ -62,11 +62,16 @@ def _sin_nombre(texto, nombre):
     return texto
 
 
+# Tipos de novedad que se consultan a la IA: solo enfermedad (posible ETA, síntomas y lesiones). BPM, EPP,
+# dotación y observaciones sin clasificar no se envían: tienen su guía fija y así se ahorran créditos.
+TIPOS_IA = ("eta", "salud", "lesion")
+
+
 def preparar(casos):
-    """Datos que se envían a la IA (sin nombres). Dotación y EPP no se envían: su guía es fija y son muchos."""
+    """Datos que se envían a la IA (sin nombres): solo las novedades de enfermedad (TIPOS_IA)."""
     entrada = []
     for c in casos:
-        items = [i for i in c["items"] if i["tipo"] not in ("dotacion", "epp")]
+        items = [i for i in c["items"] if i["tipo"] in TIPOS_IA]
         if not items:
             continue
         ya_indicado = []
@@ -239,7 +244,7 @@ def consejos_del_dia(con, dia, casos, cfg=None, consultar_ia=True):
     for caso in casos:
         if caso.get("codigo") in codigos:
             for i in caso["items"]:
-                if i["tipo"] not in ("dotacion", "epp"):
+                if i["tipo"] in TIPOS_IA:
                     tipos.add(i["tipo"])
                     claves.add(i["clave"])
                     if i["etiqueta"].startswith("Mencionado"):

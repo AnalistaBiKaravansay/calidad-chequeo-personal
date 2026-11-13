@@ -114,13 +114,18 @@ def test_escalera_gripa(con):
     assert any("tapabocas" in p.lower() for p in item["pasos"]) and any("EPS" in p for p in item["pasos"])
 
 
-def test_ia_no_recibe_nombres_ni_dotacion(con):
-    datos.guardar(con, fila(1, nombre="Rosa Pérez", obs="Rosa con gripa. Uniforme roto"))
+def test_ia_solo_recibe_enfermedad_y_sin_nombres(con):
+    datos.guardar(con, fila(1, nombre="Rosa Pérez", obs="Rosa con gripa. Uniforme roto",
+                            **{"Criterios BPM.Uso adecuado cofia": "No cumple"}))
     datos.guardar(con, fila(2, nombre="Solo Epp", **{"CRITERIOS EPP .Tapaoídos": "NO"}))
+    datos.guardar(con, fila(3, nombre="Solo Bpm", **{"Criterios BPM.Uso adecuado cofia": "No cumple"}))
+    datos.guardar(con, fila(4, nombre="Sin Clasificar", obs="Llegó tarde por el bus de la ruta"))
     _, casos = analisis.novedades_del_dia(con, "2026-10-20")
+    assert {i["tipo"] for c in casos for i in c["items"]} >= {"salud", "bpm", "epp", "dotacion", "revisar"}
     entrada = ia.preparar(casos)
     texto = json.dumps(entrada, ensure_ascii=False)
     assert "Rosa" not in texto and "Pérez" not in texto and "Solo" not in texto
+    # Solo el caso con enfermedad, y de él solo la gripa (ni la cofia ni el uniforme).
     assert len(entrada) == 1 and all(n["tipo"] == "salud" for n in entrada[0]["novedades"])
 
 

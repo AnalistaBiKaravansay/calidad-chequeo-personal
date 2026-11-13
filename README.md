@@ -77,7 +77,7 @@ El plan gratuito de Neon limita el espacio (unos 500 MB) y las horas que la base
 | **Horas de Neon** | El puente revisa en el PC si el Excel cambió (tamaño y fecha, guardados en `firmas.json`). Si no cambió, **no se conecta**, y la base sigue dormida. |
 | **Consultas de la página** | La página guarda en memoria las respuestas (sin la fila completa) y solo las vuelve a pedir cuando cambian los datos. Cada página hace unas pocas consultas pequeñas. La fila completa del Excel se pide solo en Datos con "Todas las columnas", y solo de la página que se ve. |
 | **Velocidad** | Render y Neon en la misma zona (AWS US East / Virginia). Páginas comprimidas (gzip); el estilo y el logo quedan guardados en el navegador. |
-| **IA** | Cada caso se identifica por su contenido: si llegan casos nuevos, **solo esos** se envían; los ya respondidos se conservan. De la guía solo va la parte que aplica a esos casos. Nunca se envían nombres. |
+| **IA** | **Solo se consultan los casos de enfermedad** (posible ETA, síntomas de salud y lesiones; `ia.TIPOS_IA`). BPM, EPP, dotación y observaciones sin clasificar no van a la IA: se muestran con los pasos fijos de la guía. Cada caso se identifica por su contenido: si llegan casos nuevos, **solo esos** se envían; los ya respondidos se conservan. De la guía solo va la parte que aplica a esos casos. Nunca se envían nombres. |
 
 ## Puesta en marcha
 
