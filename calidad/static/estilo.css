@@ -125,6 +125,41 @@ section > details > summary { cursor: pointer; list-style-position: outside; }
 .reporte .r-tabla { background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio); overflow: hidden; }
 .reporte .r-ia { border-radius: 8px !important; background: var(--azul-claro) !important; }
 
+/* Reporte del día en la página: indicadores, tabla de casos que se abre en tarjeta y meses */
+.kpis-titulo { font-size: 1rem; margin: 1.1rem 0 .55rem; }
+.kpis-titulo:first-child { margin-top: 0; }
+.kpi-bueno { border-top: 3px solid var(--verde); }
+a.kpi-filtro { text-decoration: none; color: inherit; cursor: pointer; }
+a.kpi-filtro:hover { background: var(--superficie-2); border-color: var(--borde-fuerte); }
+.mensaje.aviso { background: var(--naranja-claro); border-color: #f0b46a; }
+.mensaje.alerta-alta { background: var(--rojo-claro); border-color: #e57373; }
+.casos-cabeza { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .5rem; margin-bottom: .5rem; }
+.casos-cabeza h2 { margin: 0; }
+.filtros .chip { cursor: pointer; font: inherit; font-size: .8rem; color: inherit; }
+.filtros .chip.activo { background: var(--amarillo); border-color: var(--amarillo-osc); font-weight: 650; }
+table.casos { background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio); overflow: hidden; }
+table.casos thead th { background: var(--superficie-2); }
+tr.fila-caso { cursor: pointer; }
+tr.fila-caso:hover, tr.fila-caso.abierta { background: var(--amarillo-suave); }
+tr.fila-caso:focus-visible { outline: 2px solid var(--amarillo-osc); outline-offset: -2px; }
+tr.fila-caso td { vertical-align: middle; }
+tr.fila-caso td.novedades { min-width: 220px; }
+tr.fila-caso .abrir { display: inline-block; margin-left: .35rem; color: var(--suave); transition: transform .15s; }
+tr.fila-caso.abierta .abrir { transform: rotate(180deg); }
+.con-ia { font-size: .68rem; font-weight: 700; color: #3b5b8c; border: 1px solid #9fb3d1; border-radius: 4px; padding: 0 .3rem; }
+.nivel { display: inline-block; font-size: .72rem; border: 1px solid; border-radius: 4px; padding: 0 .35rem; }
+tr.detalle > td { background: var(--superficie-2); padding: .6rem .75rem 1rem !important; }
+.tarjeta-caso { background: var(--superficie); border: 1px solid var(--borde); border-left: 5px solid; border-radius: 10px; padding: .9rem 1.1rem; box-shadow: var(--sombra); line-height: 1.45; }
+.pasos-generales { margin-top: .5rem; font-size: .85rem; }
+.pasos-generales summary { cursor: pointer; color: var(--suave); }
+.pasos-generales ol { margin: .3rem 0 0 1.2rem; padding: 0; }
+table.meses tr.actual td { background: var(--amarillo-suave); font-weight: 600; }
+.dif { font-size: .7rem; }
+.dif.peor { color: var(--rojo); }
+.dif.mejor { color: var(--verde); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.pie-reporte { margin-top: 1.5rem; border-top: 1px solid var(--borde); padding-top: .6rem; font-size: .78rem; }
+
 /* Marcas de Calidad sobre los consejos de la IA */
 .valorar { display: flex; flex-wrap: wrap; gap: .4rem; align-items: flex-start; margin: .25rem 0 .6rem; font-size: .8rem; }
 .valorar form { margin: 0; display: flex; gap: .3rem; align-items: flex-start; }

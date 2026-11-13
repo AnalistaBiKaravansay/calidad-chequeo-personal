@@ -16,6 +16,12 @@ NOMBRE_TIPO = {"eta": "Alerta ETA", "salud": "Salud", "lesion": "Lesión", "revi
                "dotacion": "Dotación", "epp": "EPP"}
 
 
+def nombre_mes(mes, corto=False):
+    """'2026-11' -> 'noviembre 2026' (o 'nov 2026')."""
+    n = MESES[int(mes[5:7]) - 1]
+    return f"{n[:3] if corto else n} {mes[:4]}"
+
+
 def fecha_larga(dia):
     d = date.fromisoformat(dia)
     return f"{DIAS[d.weekday()]} {d.day} de {MESES[d.month - 1]} de {d.year}"
@@ -29,7 +35,7 @@ plantillas = Environment(loader=PackageLoader("calidad", "templates"), autoescap
 plantillas.globals.update(COLORES=COLORES, NOMBRE_TIPO=NOMBRE_TIPO, ETA=guia.ETA, ACCION_ETA=guia.ACCION_ETA,
                           REINTEGRO_ETA=guia.REINTEGRO_ETA, AVISO=guia.AVISO, FUENTES=guia.FUENTES,
                           NIVELES=guia.NIVELES, COLOR_NIVEL={1: "#2c6a45", 2: "#7a6200", 3: "#a43a28"})
-plantillas.filters.update(fecha_larga=fecha_larga, veces=veces)
+plantillas.filters.update(fecha_larga=fecha_larga, veces=veces, nombre_mes=nombre_mes)
 
 
 def estado_forms(con, cfg, dia):
@@ -84,6 +90,7 @@ def construir(con, dia, cfg=None, consultar_ia=True):
         "resumen": analisis.resumen_dia(respuestas, casos),
         "secciones": secciones,
         "alertas": analisis.alertas_patrones(con, dia),
+        "mes": analisis.indicadores_mes(con, dia),
         "ia": consejos,
         "aviso_fuente": estado_forms(con, cfg, dia),
         "generado": datetime.now().strftime("%Y-%m-%d %H:%M"),

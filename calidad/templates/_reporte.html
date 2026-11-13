@@ -1,5 +1,242 @@
-{# Cuerpo del reporte diario. Estilos en línea y tablas para que se vea bien también en Outlook. #}
+{# Cuerpo del reporte diario. En el correo: estilos en línea y tablas para que se vea bien en Outlook.
+   En la página (web): indicadores arriba, casos en tabla y al hacer clic se abre la tarjeta del caso. #}
 {% set r = resumen %}
+{% set m = mes %}
+
+{# Tarjeta de un caso: la misma en el correo y al abrir una fila en la página. #}
+{% macro tarjeta(c, s) -%}
+<div style="font-size:15px"><b>{% if web %}<a href="/tablero?persona={{ c.persona|urlencode }}" style="color:inherit" title="Ver la ficha de la persona">{{ c.nombre }}</a>{% else %}{{ c.nombre }}{% endif %}</b>
+  <span style="color:#5f6b7a"> · {{ c.lugar }} · {{ c.fecha[11:16] }} · revisó {{ c.responsable or 'sin dato' }}</span></div>
+{% if c.dias_salud_previos >= 2 and s.clave in ('eta', 'salud') %}
+<div style="color:#5f6b7a;font-size:13px;margin-top:2px">Ha reportado síntomas otros {{ c.dias_salud_previos }} días en los últimos 30 días.</div>
+{% endif %}
+{% if c.observacion %}<div style="margin:6px 0;color:#3e4c59"><i>“{{ c.observacion }}”</i></div>{% endif %}
+<div style="margin:6px 0">
+  {% for i in c['items'] %}
+  <div style="margin:2px 0">
+    <span style="display:inline-block;background:{{ COLORES[i.tipo] }};color:#fff;font-size:11px;padding:1px 6px;border-radius:3px">{{ NOMBRE_TIPO[i.tipo] }}</span>
+    {{ i.etiqueta }}
+    {% if i.nivel %}<span style="display:inline-block;border:1px solid {{ COLOR_NIVEL[i.nivel] }};color:{{ COLOR_NIVEL[i.nivel] }};font-size:11px;padding:0 6px;border-radius:3px">{{ NIVELES[i.nivel] }}</span>{% endif %}
+    <span style="color:#5f6b7a;font-size:12px">({{ i.origen }}{% if i.repeticiones %}; <b>{{ i.repeticiones|veces }}</b>, antes: {{ i.dias_previos|join(', ') }}{% endif %})</span>
+    {% if i.nota %}<div style="font-size:12px;color:#5f6b7a;margin-left:8px">{{ i.nota }}</div>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% for i in c['items'] if i.tipo == 'eta' %}
+<div style="background:#fdecea;padding:8px 10px;margin:6px 0;border-radius:4px;font-size:13px">
+  <b>{{ i.etiqueta }}</b>: {{ ETA[i.clave].explicacion }}<br>
+  <b>Acción:</b> {{ ACCION_ETA }} <b>Reintegro:</b> {{ REINTEGRO_ETA }}<br>
+  <span style="color:#5f6b7a">{{ ETA[i.clave].nota }}</span>
+</div>
+{% endfor %}
+{% if c.pasos %}
+<div style="font-weight:600;margin-top:6px">{{ 'Pasos a seguir (guía)' if c['items'][0].tipo == 'eta' else 'Qué hacer ahora (guía)' }}</div>
+<ol style="margin:4px 0 4px 20px;padding:0">{% for p in c.pasos %}<li>{{ p }}</li>{% endfor %}</ol>
+{% endif %}
+{% if web %}
+  {% set generales = pasos_dotacion if s.clave == 'dotacion' else (pasos_epp if s.clave == 'epp' else s.pasos) %}
+  {% if generales %}
+  <details class="pasos-generales"><summary>Pasos generales de la guía para estos casos</summary>
+    <ol>{% for p in generales %}<li>{{ p }}</li>{% endfor %}</ol></details>
+  {% endif %}
+{% endif %}
+{% if c.ia and c.ia.consejos %}
+<div class="r-ia" style="background:#eef3fb;padding:8px 10px;margin-top:6px;border-radius:4px">
+  <div style="font-weight:600">Consejos (IA)</div>
+  <ul style="margin:4px 0 0 18px;padding:0">{% for x in c.ia.consejos %}<li>{{ x }}
+    {% if web and 'acciones' in (puede or ()) %}{% set v = valoraciones.get((c.id, x)) or {} %}
+    <div class="valorar">
+      <form method="post" action="/valorar">
+        <input type="hidden" name="dia" value="{{ dia }}"><input type="hidden" name="respuesta_id" value="{{ c.id }}">
+        <input type="hidden" name="consejo" value="{{ x }}">
+        <button name="voto" value="1" class="voto {{ 'marcado' if v.voto == 1 }}" title="Útil">👍 Útil</button>
+        <button name="voto" value="-1" class="voto {{ 'marcado-no' if v.voto == -1 }}" title="No sirve">👎 No sirve</button>
+      </form>
+      <details {{ 'open' if v.correccion }}>
+        <summary>{{ 'Corrección guardada' if v.correccion else 'Corregir' }}</summary>
+        <form method="post" action="/valorar">
+          <input type="hidden" name="dia" value="{{ dia }}"><input type="hidden" name="respuesta_id" value="{{ c.id }}">
+          <input type="hidden" name="consejo" value="{{ x }}">
+          <textarea name="correccion" rows="2" placeholder="¿Cómo lo diría usted? Ej.: Preguntar si ya pidió la cita en la EPS">{{ v.correccion or '' }}</textarea>
+          <button>Guardar</button>
+        </form>
+      </details>
+    </div>
+    {% endif %}</li>{% endfor %}</ul>
+  {% if c.ia.atencion %}<div style="margin-top:4px"><b>Atención:</b> {{ c.ia.atencion }}</div>{% endif %}
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro flecha(t) -%}
+{% if t.dif is none %}<span>sin datos de {{ m.mes_antes|nombre_mes(true) }}</span>
+{% elif t.dif == 0 %}<span>= igual que {{ m.mes_antes|nombre_mes(true) }}</span>
+{% else %}<span class="{{ t.estado }}" title="{{ t.pct_antes }}% en {{ m.mes_antes|nombre_mes }}">{{ '▲' if t.dif > 0 else '▼' }} {{ t.dif|abs }} pts vs. {{ m.mes_antes|nombre_mes(true) }} ({{ t.pct_antes }}%)</span>{% endif %}
+{%- endmacro %}
+
+{% if web %}
+{# ---------------------------------- PÁGINA ---------------------------------- #}
+{% if aviso_fuente %}<div class="mensaje aviso"><b>Atención:</b> {{ aviso_fuente }}</div>{% endif %}
+
+<h2 class="kpis-titulo">Hoy <span class="nota">· {{ r.respuestas }} chequeos de {{ r.personas }} personas</span></h2>
+<div class="kpis">
+  <div class="kpi kpi-bueno"><div class="kpi-titulo">Sin novedad</div>
+    <div class="kpi-valor">{{ ((100 * r.sin_novedad / r.respuestas)|round|int ~ '%') if r.respuestas else '—' }}</div>
+    <div class="kpi-pie"><span>{{ r.sin_novedad }} de {{ r.respuestas }} chequeos</span></div></div>
+  {% for valor, texto, tipo in [(r.eta, 'Alerta ETA', 'eta'), (r.salud, 'Síntomas o lesión', 'salud'), (r.bpm, 'Incumplen BPM', 'bpm'), (r.dotacion, 'Dotación / EPP', 'dotacion')] %}
+  <a class="kpi kpi-filtro" href="#casos" data-filtro="{{ tipo }}" title="Ver estos casos en la tabla">
+    <div class="kpi-titulo">{{ texto }}</div>
+    <div class="kpi-valor" {% if valor %}style="color:{{ COLORES[tipo] }}"{% endif %}>{{ valor }}</div>
+    <div class="kpi-pie"><span>{{ ((100 * valor / r.respuestas)|round(1) ~ '% de los chequeos') if r.respuestas else 'sin chequeos' }}</span></div>
+  </a>
+  {% endfor %}
+</div>
+
+<h2 class="kpis-titulo">{{ m.mes|nombre_mes|capitalize }} <span class="nota">· acumulado al {{ dia[8:10]|int }} · {{ m.ahora.chequeos }} chequeos, {{ m.ahora.personas }} personas, {{ m.ahora.dias }} días con chequeo</span></h2>
+<div class="kpis">
+  {% for t in m.tarjetas %}
+  <div class="kpi {{ 'kpi-bueno' if t.clave == 'sin_novedad' }}">
+    <div class="kpi-titulo">{{ t.titulo }}</div>
+    <div class="kpi-valor">{{ t.pct }}%</div>
+    <div class="kpi-pie"><span>{{ t.valor }} de {{ m.ahora.chequeos }} chequeos</span>{{ flecha(t) }}</div>
+  </div>
+  {% endfor %}
+</div>
+<p class="nota">Porcentaje de chequeos del mes con cada novedad, frente al mes anterior completo. «pts» = puntos porcentuales.</p>
+
+{% if ia.resumen_dia %}
+<div class="r-ia" style="border-left:4px solid #b8a015;background:#fdf8e7;padding:10px 12px;margin:1rem 0">
+  <b>Resumen del día (IA):</b> {{ ia.resumen_dia }}
+</div>
+{% elif ia.estado not in ('ok', 'sin casos') %}
+<p class="nota">Consejos de IA: {{ ia.estado }}. Se muestran los pasos de la guía.</p>
+{% endif %}
+
+{% for a in alertas %}
+<div class="mensaje {{ 'alerta-alta' if a.nivel == 'alta' else 'aviso' }}"><b>{{ 'Posible brote' if a.nivel == 'alta' else 'Aumento de casos' }}:</b> {{ a.texto }}</div>
+{% endfor %}
+
+<section id="casos">
+  <div class="casos-cabeza">
+    <h2>Casos del día <span class="nota">· clic en una fila para ver la tarjeta</span></h2>
+    {% if secciones|selectattr('casos')|list %}
+    <div class="chips filtros" role="group" aria-label="Filtrar casos">
+      <button type="button" class="chip activo" data-filtro="">Todos</button>
+      {% for t, texto in [('eta', 'ETA'), ('salud', 'Salud y lesiones'), ('bpm', 'BPM'), ('dotacion', 'Dotación / EPP')] %}
+      {% set n = secciones|selectattr('clave', 'in', ['dotacion', 'epp'] if t == 'dotacion' else [t])|map(attribute='casos')|map('length')|sum %}
+      {% if n %}<button type="button" class="chip" data-filtro="{{ t }}">{{ texto }} · {{ n }}</button>{% endif %}
+      {% endfor %}
+      <button type="button" class="chip discreto" data-abrir>Abrir todas</button>
+    </div>
+    {% endif %}
+  </div>
+  {% if r.respuestas == 0 %}<p>No hay chequeos registrados para este día.</p>
+  {% elif not secciones|selectattr('casos')|list %}<p>Ningún chequeo con novedades este día.</p>
+  {% else %}
+  <div class="tabla"><table class="casos">
+    <thead><tr><th>Tipo</th><th>Persona</th><th>Lugar</th><th class="num">Hora</th><th>Novedades</th><th>Seguimiento</th><th><span class="sr">Abrir</span></th></tr></thead>
+    <tbody>
+    {% for s in secciones %}{% for c in s.casos %}
+    {% set tipo = c['items'][0].tipo %}
+    {% set niveles = c['items']|selectattr('nivel')|map(attribute='nivel')|list %}
+    {% set nivel = niveles|max if niveles else 0 %}
+    {% set rep = c['items']|map(attribute='repeticiones')|max %}
+    <tr class="fila-caso" data-tipo="{{ 'dotacion' if s.clave == 'epp' else s.clave }}" data-caso="r{{ c.id }}" tabindex="0" aria-expanded="false" aria-controls="r{{ c.id }}">
+      <td><span class="etiqueta" style="background:{{ COLORES[tipo] }}">{{ NOMBRE_TIPO[tipo] }}</span></td>
+      <td class="sin-salto"><b>{{ c.nombre }}</b></td>
+      <td class="sin-salto">{{ c.lugar }}</td>
+      <td class="num">{{ c.fecha[11:16] }}</td>
+      <td class="novedades">{% for i in c['items'] %}{{ i.etiqueta }}{{ '; ' if not loop.last }}{% endfor %}</td>
+      <td class="sin-salto">{% if nivel %}<span class="nivel" style="color:{{ COLOR_NIVEL[nivel] }};border-color:{{ COLOR_NIVEL[nivel] }}">{{ NIVELES[nivel] }}</span> {% endif %}{% if rep %}<span class="nota">{{ rep|veces }}</span>{% endif %}</td>
+      <td class="sin-salto">{% if c.ia and c.ia.consejos %}<span class="con-ia" title="Tiene consejos de la IA">IA</span>{% endif %}<span class="abrir" aria-hidden="true">▾</span></td>
+    </tr>
+    <tr class="detalle" id="r{{ c.id }}" hidden><td colspan="7">
+      <div class="tarjeta-caso" style="border-left-color:{{ COLORES[tipo] }}">{{ tarjeta(c, s) }}</div>
+    </td></tr>
+    {% endfor %}{% endfor %}
+    </tbody>
+  </table></div>
+  {% endif %}
+</section>
+
+{% if epp %}
+<section>
+  <h2>EPP marcados NO, por elemento</h2>
+  <div class="tabla"><table>
+    <tr><th>Elemento</th><th class="num">Personas</th><th class="num">% chequeos</th><th>Quiénes</th></tr>
+    {% for elemento, nombres in epp %}
+    <tr><td>{{ elemento }}</td><td class="num">{{ nombres|length }}</td><td class="num">{{ ((100 * nombres|length / r.respuestas)|round|int) if r.respuestas else 0 }}%</td><td class="nota">{{ nombres|join(', ') }}</td></tr>
+    {% endfor %}
+  </table></div>
+</section>
+{% endif %}
+
+<section>
+  <h2>Indicadores mensuales <span class="nota">· % de los chequeos de cada mes · <a href="/tablero">ver más en el tablero</a></span></h2>
+  {% set hist = m.historia|reverse|list %}
+  <div class="tabla"><table class="meses">
+    <tr><th>Mes</th><th class="num">Chequeos</th><th class="num">Personas</th><th class="num">Días</th>{% for c, t in m.columnas %}<th class="num">{{ t }}</th>{% endfor %}</tr>
+    {% for f in hist %}{% set previo = hist[loop.index] if not loop.last else none %}
+    <tr {% if f.mes == m.mes %}class="actual"{% endif %}><td class="sin-salto">{{ f.mes|nombre_mes|capitalize }}{% if f.mes == m.mes %} <span class="nota">(al {{ dia[8:10]|int }})</span>{% endif %}</td>
+      <td class="num">{{ f.chequeos }}</td><td class="num">{{ f.personas }}</td><td class="num">{{ f.dias }}</td>
+      {% for c, t in m.columnas %}{% set p = f[c ~ '_pct'] %}
+      <td class="num sin-salto" title="{{ f[c] }} de {{ f.chequeos }} chequeos">{{ p }}%{% if previo %}{% set d = (p - previo[c ~ '_pct'])|round(1) %}{% if d %} <span class="dif {{ ('mejor' if d > 0 else 'peor') if c == 'sin_novedad' else ('peor' if d > 0 else 'mejor') }}" title="{{ '+' if d > 0 }}{{ d }} pts frente al mes anterior">{{ '▲' if d > 0 else '▼' }}</span>{% endif %}{% endif %}</td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </table></div>
+  <p class="nota">Cada chequeo cuenta una vez por indicador. La flecha compara con el mes anterior: verde mejora, rojo empeora.</p>
+</section>
+
+<p class="nota pie-reporte">{{ AVISO }} Fuentes: {% for k, v in FUENTES.items() %}[{{ k }}] {{ v }}{{ '; ' if not loop.last }}{% endfor %}.
+  {% if ia.modelo %}Consejos generados con {{ ia.modelo }} sin enviar nombres.{% endif %}</p>
+
+<script>
+(function () {
+  var tabla = document.querySelector('table.casos');
+  if (!tabla) return;
+  function abrir(fila, si) {
+    var d = document.getElementById(fila.dataset.caso);
+    if (si === undefined) si = d.hidden;
+    d.hidden = !si; fila.setAttribute('aria-expanded', si); fila.classList.toggle('abierta', si);
+  }
+  tabla.addEventListener('click', function (e) {
+    var f = e.target.closest('tr.fila-caso');
+    if (f && !e.target.closest('a,button,form,textarea')) abrir(f);
+  });
+  tabla.addEventListener('keydown', function (e) {
+    var f = e.target.closest && e.target.closest('tr.fila-caso');
+    if (f && e.target === f && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); abrir(f); }
+  });
+  function filtrar(tipo) {
+    tabla.querySelectorAll('tr.fila-caso').forEach(function (f) {
+      var ver = !tipo || f.dataset.tipo === tipo;
+      f.hidden = !ver;
+      if (!ver) abrir(f, false);
+    });
+    document.querySelectorAll('.filtros [data-filtro]').forEach(function (b) {
+      b.classList.toggle('activo', b.dataset.filtro === tipo);
+    });
+  }
+  document.querySelectorAll('[data-filtro]').forEach(function (b) {
+    b.addEventListener('click', function () { filtrar(b.dataset.filtro); });
+  });
+  var todas = document.querySelector('[data-abrir]');
+  if (todas) todas.addEventListener('click', function () {
+    var cerrar = todas.dataset.estado === 'abiertas';
+    tabla.querySelectorAll('tr.fila-caso:not([hidden])').forEach(function (f) { abrir(f, !cerrar); });
+    todas.dataset.estado = cerrar ? '' : 'abiertas';
+    todas.textContent = cerrar ? 'Abrir todas' : 'Cerrar todas';
+  });
+  if (location.hash.length > 2) {
+    var f = tabla.querySelector('tr.fila-caso[data-caso="' + location.hash.slice(1) + '"]');
+    if (f) { abrir(f, true); f.scrollIntoView({block: 'center'}); }
+  }
+})();
+</script>
+
+{% else %}
+{# ---------------------------------- CORREO ---------------------------------- #}
 <div style="font-family:Segoe UI,Arial,sans-serif;color:#1f2933;font-size:14px;line-height:1.45;max-width:860px">
   <div class="r-titulo"><h1 style="font-size:22px;margin:0 0 4px">Chequeo diario de personal</h1>
   <div style="color:#5f6b7a;margin-bottom:14px">{{ dia|fecha_larga|capitalize }} · generado {{ generado }}</div></div>
@@ -15,11 +252,23 @@
       {% for valor, texto, color in [(r.respuestas, 'chequeos', '#1f2933'), (r.eta, 'alertas ETA', COLORES.eta), (r.salud, 'síntomas o lesiones', COLORES.salud), (r.bpm, 'incumplen BPM', COLORES.bpm), (r.dotacion, 'dotación / EPP', COLORES.dotacion)] %}
       <td style="background:#f4f6f8;border-radius:4px;padding:10px;text-align:center;width:20%">
         <div style="font-size:24px;font-weight:700;color:{{ color }}">{{ valor }}</div>
-        <div style="font-size:12px;color:#5f6b7a">{{ texto }}</div>
+        <div style="font-size:12px;color:#5f6b7a">{{ texto }}{% if not loop.first and r.respuestas %} · {{ (100 * valor / r.respuestas)|round|int }}%{% endif %}</div>
       </td>
       {% endfor %}
     </tr>
   </table>
+
+  {% if m.ahora.chequeos %}
+  <div style="font-weight:600;margin:0 0 4px">{{ m.mes|nombre_mes|capitalize }} (al {{ dia[8:10]|int }}): {{ m.ahora.chequeos }} chequeos</div>
+  <table cellspacing="0" cellpadding="5" style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:14px">
+    <tr style="background:#f4f6f8;text-align:left"><th>Indicador</th><th style="text-align:right">Este mes</th><th style="text-align:right">{{ m.mes_antes|nombre_mes(true)|capitalize }}</th><th style="text-align:right">Cambio</th></tr>
+    {% for t in m.tarjetas %}
+    <tr style="border-top:1px solid #e4e7eb"><td>{{ t.titulo }}</td><td style="text-align:right"><b>{{ t.pct }}%</b> <span style="color:#5f6b7a">({{ t.valor }})</span></td>
+      <td style="text-align:right">{{ (t.pct_antes ~ '%') if t.dif is not none else '—' }}</td>
+      <td style="text-align:right;color:{{ '#a43a28' if t.estado == 'peor' else ('#2c6a45' if t.estado == 'mejor' else '#5f6b7a') }}">{% if t.dif %}{{ '▲' if t.dif > 0 else '▼' }} {{ t.dif|abs }} pts{% elif t.dif == 0 %}={% endif %}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
 
   {% if ia.resumen_dia %}
   <div class="r-ia" style="border-left:4px solid #b8a015;background:#fdf8e7;padding:10px 12px;margin-bottom:14px">
@@ -49,62 +298,7 @@
   {% endif %}
   {% for c in s.casos %}
   <table role="presentation" class="r-caso" cellspacing="0" cellpadding="0" id="r{{ c.id }}" style="width:100%;border:1px solid #d9dee4;border-left:5px solid {{ COLORES[c['items'][0].tipo] }};margin-bottom:10px;border-radius:4px">
-    <tr><td style="padding:10px 12px">
-      <div style="font-size:15px"><b>{% if web %}<a href="/tablero?persona={{ c.persona|urlencode }}" style="color:inherit">{{ c.nombre }}</a>{% else %}{{ c.nombre }}{% endif %}</b>
-        <span style="color:#5f6b7a"> · {{ c.lugar }} · {{ c.fecha[11:16] }} · revisó {{ c.responsable or 'sin dato' }}</span></div>
-      {% if c.dias_salud_previos >= 2 and s.clave in ('eta', 'salud') %}
-      <div style="color:#5f6b7a;font-size:13px;margin-top:2px">Ha reportado síntomas otros {{ c.dias_salud_previos }} días en los últimos 30 días.</div>
-      {% endif %}
-      {% if c.observacion %}<div style="margin:6px 0;color:#3e4c59"><i>“{{ c.observacion }}”</i></div>{% endif %}
-      <div style="margin:6px 0">
-        {% for i in c['items'] %}
-        <div style="margin:2px 0">
-          <span style="display:inline-block;background:{{ COLORES[i.tipo] }};color:#fff;font-size:11px;padding:1px 6px;border-radius:3px">{{ NOMBRE_TIPO[i.tipo] }}</span>
-          {{ i.etiqueta }}
-          {% if i.nivel %}<span style="display:inline-block;border:1px solid {{ COLOR_NIVEL[i.nivel] }};color:{{ COLOR_NIVEL[i.nivel] }};font-size:11px;padding:0 6px;border-radius:3px">{{ NIVELES[i.nivel] }}</span>{% endif %}
-          <span style="color:#5f6b7a;font-size:12px">({{ i.origen }}{% if i.repeticiones %}; <b>{{ i.repeticiones|veces }}</b>, antes: {{ i.dias_previos|join(', ') }}{% endif %})</span>
-          {% if i.nota %}<div style="font-size:12px;color:#5f6b7a;margin-left:8px">{{ i.nota }}</div>{% endif %}
-        </div>
-        {% endfor %}
-      </div>
-      {% for i in c['items'] if i.tipo == 'eta' %}
-      <div style="background:#fdecea;padding:8px 10px;margin:6px 0;border-radius:4px;font-size:13px">
-        <b>{{ i.etiqueta }}</b>: {{ ETA[i.clave].explicacion }}<br>
-        <b>Acción:</b> {{ ACCION_ETA }} <b>Reintegro:</b> {{ REINTEGRO_ETA }}<br>
-        <span style="color:#5f6b7a">{{ ETA[i.clave].nota }}</span>
-      </div>
-      {% endfor %}
-      {% if c.pasos %}
-      <div style="font-weight:600;margin-top:6px">{{ 'Pasos a seguir (guía)' if c['items'][0].tipo == 'eta' else 'Qué hacer ahora (guía)' }}</div>
-      <ol style="margin:4px 0 4px 20px;padding:0">{% for p in c.pasos %}<li>{{ p }}</li>{% endfor %}</ol>
-      {% endif %}
-      {% if c.ia and c.ia.consejos %}
-      <div class="r-ia" style="background:#eef3fb;padding:8px 10px;margin-top:6px;border-radius:4px">
-        <div style="font-weight:600">Consejos (IA)</div>
-        <ul style="margin:4px 0 0 18px;padding:0">{% for x in c.ia.consejos %}<li>{{ x }}
-          {% if web and 'acciones' in (puede or ()) %}{% set v = valoraciones.get((c.id, x)) or {} %}
-          <div class="valorar">
-            <form method="post" action="/valorar">
-              <input type="hidden" name="dia" value="{{ dia }}"><input type="hidden" name="respuesta_id" value="{{ c.id }}">
-              <input type="hidden" name="consejo" value="{{ x }}">
-              <button name="voto" value="1" class="voto {{ 'marcado' if v.voto == 1 }}" title="Útil">👍 Útil</button>
-              <button name="voto" value="-1" class="voto {{ 'marcado-no' if v.voto == -1 }}" title="No sirve">👎 No sirve</button>
-            </form>
-            <details {{ 'open' if v.correccion }}>
-              <summary>{{ 'Corrección guardada' if v.correccion else 'Corregir' }}</summary>
-              <form method="post" action="/valorar">
-                <input type="hidden" name="dia" value="{{ dia }}"><input type="hidden" name="respuesta_id" value="{{ c.id }}">
-                <input type="hidden" name="consejo" value="{{ x }}">
-                <textarea name="correccion" rows="2" placeholder="¿Cómo lo diría usted? Ej.: Preguntar si ya pidió la cita en la EPS">{{ v.correccion or '' }}</textarea>
-                <button>Guardar</button>
-              </form>
-            </details>
-          </div>
-          {% endif %}</li>{% endfor %}</ul>
-        {% if c.ia.atencion %}<div style="margin-top:4px"><b>Atención:</b> {{ c.ia.atencion }}</div>{% endif %}
-      </div>
-      {% endif %}
-    </td></tr>
+    <tr><td style="padding:10px 12px">{{ tarjeta(c, s) }}</td></tr>
   </table>
   {% endfor %}
   {% endfor %}
@@ -139,3 +333,4 @@
     {% if ia.modelo %}Consejos generados con {{ ia.modelo }} sin enviar nombres.{% endif %}
   </p>
 </div>
+{% endif %}

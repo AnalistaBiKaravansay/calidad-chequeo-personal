@@ -170,7 +170,9 @@ def alertas_patrones(con, dia):
 def resumen_dia(respuestas, casos):
     personas = lambda tipos: len({c["persona"] for c in casos if any(i["tipo"] in tipos for i in c["items"])})
     return {"respuestas": len(respuestas), "eta": personas({"eta"}), "salud": personas({"salud", "lesion"}),
-            "bpm": personas({"bpm"}), "dotacion": personas({"dotacion", "epp"})}
+            "bpm": personas({"bpm"}), "dotacion": personas({"dotacion", "epp"}),
+            "personas": len({r["persona"] for r in respuestas}),
+            "sin_novedad": sum(1 for r in respuestas if not r["novedades"])}
 
 
 # Indicadores del tablero: (clave, título, qué cuenta en cada chequeo, si subir es malo).
@@ -182,6 +184,8 @@ INDICADORES = [
     ("epp", "Sin algún EPP", lambda r: any(n["tipo"] == "epp" for n in r["novedades"]), True),
     ("dotacion", "Con novedad de dotación", lambda r: any(n["tipo"] == "dotacion" for n in r["novedades"]), True),
 ]
+# Cumplimiento: chequeos sin ninguna novedad (subir es bueno).
+SIN_NOVEDAD = ("sin_novedad", "Sin novedad", lambda r: not r["novedades"], False)
 CATEGORIAS = [("eta", "Alertas ETA"), ("salud", "Síntomas"), ("lesion", "Lesiones"), ("revisar", "Observaciones por revisar"),
               ("bpm", "BPM"), ("epp", "EPP"), ("dotacion", "Dotación")]
 
@@ -210,6 +214,43 @@ def _kpis(todas, hasta):
     return kpis
 
 
+def _pct(parte, total):
+    return round(100 * parte / total, 1) if total else 0.0
+
+
+def indicadores_mes(con, dia, meses_atras=6):
+    """Indicadores del mes del día (hasta ese día) frente al mes anterior completo, en % de los chequeos,
+    y la evolución de los últimos meses. Los meses tienen distinto número de chequeos: se comparan porcentajes."""
+    mes = dia[:7]
+    primero = _dia(mes + "-01")
+    mes_antes = (primero - timedelta(days=1)).isoformat()[:7]
+    por_mes = defaultdict(list)
+    for r in registros(con):
+        if r["dia"] <= dia:
+            por_mes[r["dia"][:7]].append(r)
+    indicadores = [SIN_NOVEDAD] + INDICADORES[1:]
+
+    def cifras(filas_):
+        n = len(filas_)
+        c = {"chequeos": n, "personas": len({r["persona"] for r in filas_}),
+             "dias": len({r["dia"] for r in filas_})}
+        for clave, _, cuenta, _ in indicadores:
+            c[clave] = sum(1 for r in filas_ if cuenta(r))
+            c[clave + "_pct"] = _pct(c[clave], n)
+        return c
+
+    ahora, antes = cifras(por_mes.get(mes, [])), cifras(por_mes.get(mes_antes, []))
+    tarjetas = []
+    for clave, titulo, _, malo in indicadores:
+        dif = round(ahora[clave + "_pct"] - antes[clave + "_pct"], 1) if antes["chequeos"] else None
+        tarjetas.append({"clave": clave, "titulo": titulo, "valor": ahora[clave], "pct": ahora[clave + "_pct"],
+                         "pct_antes": antes[clave + "_pct"], "dif": dif,
+                         "estado": None if not dif else ("peor" if (dif > 0) == malo else "mejor")})
+    historia = [{"mes": m, **cifras(por_mes[m])} for m in sorted(por_mes)[-meses_atras:]]
+    return {"mes": mes, "mes_antes": mes_antes, "ahora": ahora, "antes": antes, "tarjetas": tarjetas,
+            "historia": historia, "columnas": [(c, t) for c, t, _, _ in indicadores]}
+
+
 def tablero(con, hasta, lugar=""):
     """Cifras para el tablero histórico de toda la planta (o de un lugar). 'hasta' es el último día con datos."""
     base = registros(con)
@@ -219,7 +260,7 @@ def tablero(con, hasta, lugar=""):
     for r in todas:
         mes = meses[r["dia"][:7]]
         mes["chequeos"] += 1
-        for clave, _, cuenta, _ in INDICADORES[1:]:
+        for clave, _, cuenta, _ in [SIN_NOVEDAD] + INDICADORES[1:]:
             mes[clave] += cuenta(r)
     por_mes = [{"mes": m, **meses[m]} for m in sorted(meses)][-13:]
 
