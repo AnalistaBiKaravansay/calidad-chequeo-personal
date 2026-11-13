@@ -178,6 +178,11 @@ table.meses tr.actual td { background: var(--amarillo-suave); font-weight: 600; 
 .cols-ejes.chico { justify-content: space-between; }
 .cols-ejes.chico span { flex: 0 0 auto; }
 .columnas-4 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+.multiples { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: .75rem 1.25rem; }
+.multiple { border-top: 1px solid var(--borde); padding-top: .6rem; min-width: 0; }
+.multiple-titulo { font-size: .82rem; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.multiple-valor { font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.multiple-valor small { font-size: .74rem; font-weight: 500; color: var(--suave); margin-left: .2rem; }
 .globo { position: fixed; z-index: 50; pointer-events: none; background: var(--texto); color: #fff; font-size: .78rem; padding: .3rem .55rem; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.18); white-space: nowrap; }
 
 /* Marcas de Calidad sobre los consejos de la IA */

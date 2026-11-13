@@ -92,6 +92,24 @@
   </section>
 </div>
 
+{# ---------------- Enfermedades por mes ---------------- #}
+<section>
+  <h2>Enfermedades por mes <span class="nota">· síntomas y lesiones más reportados, % de los chequeos de cada mes · últimos 12 meses</span></h2>
+  {% if ind.enfermedades %}
+  <div class="multiples">
+    {% for e in ind.enfermedades %}
+    <div class="multiple">
+      <div class="multiple-titulo" title="{{ e.titulo }}">{{ e.titulo }}</div>
+      <div class="multiple-valor">{{ e.pct }}% <small>{{ e.mes }} {{ 'caso' if e.mes == 1 else 'casos' }} en {{ ind.mes|nombre_mes(true) }}</small></div>
+      {{ g.columnas_mes(e.serie, ind.mes, alto=90, nombre=e.titulo) }}
+    </div>
+    {% endfor %}
+  </div>
+  <p class="nota">Cada gráfica tiene su propia escala: compare la forma (sube o baja), no la altura entre gráficas. Al pasar el mouse se ve el % y cuántos chequeos.
+    Resaltado, el mes elegido{% if en_curso %} (va hasta el {{ fin[8:10]|int }}, por eso se compara en %){% endif %}.</p>
+  {% else %}<p class="nota">Sin síntomas reportados en el periodo.</p>{% endif %}
+</section>
+
 {# ---------------- Fila 4: tabla mensual ---------------- #}
 <section>
   <h2>Indicadores mensuales <span class="nota">· % de los chequeos de cada mes</span></h2>

@@ -218,7 +218,7 @@ def _pct(parte, total):
     return round(100 * parte / total, 1) if total else 0.0
 
 
-def indicadores_mes(con, dia, meses_atras=6, lugar=""):
+def indicadores_mes(con, dia, meses_atras=6, lugar="", max_sintomas=8):
     """Indicadores del mes del día (hasta ese día) frente al mes anterior completo, en % de los chequeos,
     la evolución de los últimos meses y el mes por lugar. Los meses tienen distinto número de chequeos:
     se comparan porcentajes."""
@@ -250,13 +250,27 @@ def indicadores_mes(con, dia, meses_atras=6, lugar=""):
     historia = [{"mes": m, **cifras(por_mes[m])} for m in sorted(por_mes)[-meses_atras:]]
     for t in tarjetas:
         t["serie"] = [(h["mes"], h[t["clave"] + "_pct"], h[t["clave"]], h["chequeos"]) for h in historia]
+    # Enfermedades por mes: los síntomas o lesiones más reportados en el periodo, cada uno con su serie mensual
+    # (% de los chequeos del mes que lo reportan). Cada chequeo cuenta una vez por síntoma.
+    meses_hist = [h["mes"] for h in historia]
+    sintomas = defaultdict(Counter)
+    for m_ in meses_hist:
+        for r in por_mes[m_]:
+            for e in {n["etiqueta"] for n in r["novedades"] if _es_salud(n) or n["tipo"] == "lesion"}:
+                sintomas[e][m_] += 1
+    principales = sorted(sintomas, key=lambda e: -sum(sintomas[e].values()))[:max_sintomas]
+    total = {h["mes"]: h["chequeos"] for h in historia}
+    enfermedades = [{"titulo": e, "total": sum(sintomas[e].values()), "mes": sintomas[e][mes],
+                     "pct": _pct(sintomas[e][mes], total.get(mes, 0)),
+                     "serie": [(m_, _pct(sintomas[e][m_], total[m_]), sintomas[e][m_], total[m_]) for m_ in meses_hist]}
+                    for e in principales]
     del_lugar = defaultdict(list)
     for r in por_mes.get(mes, []):
         del_lugar[r["lugar"]].append(r)
     lugares = sorted(({"lugar": k, **cifras(v)} for k, v in del_lugar.items()), key=lambda x: -x["chequeos"])
     ahora["por_dia"] = round(ahora["chequeos"] / ahora["dias"], 1) if ahora["dias"] else 0
     return {"mes": mes, "mes_antes": mes_antes, "ahora": ahora, "antes": antes, "tarjetas": tarjetas,
-            "historia": historia, "lugares": lugares, "columnas": [(c, t) for c, t, _, _ in indicadores]}
+            "historia": historia, "lugares": lugares, "enfermedades": enfermedades, "columnas": [(c, t) for c, t, _, _ in indicadores]}
 
 
 def tablero(con, hasta, lugar=""):
